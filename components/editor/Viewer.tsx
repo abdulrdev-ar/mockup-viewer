@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { FABRIC, THICKNESS_NORMAL, fabricNormalTexture } from '@/lib/fabric'
 import { PRINT_FONT_FAMILIES } from '@/lib/fonts'
-import { BODY_H, BODY_HALF_W, buildGarment, garmentDims, sleeveFrame, type Dims } from '@/lib/garment'
+import { MODELS, modelOf, printAttributes, type Dims, type ModelId, type ModelPart } from '@/lib/garment'
 import { paintCanvas, zoneFrames, type CanvasId } from '@/lib/print'
 import type { Garment } from '@/lib/slices/garment'
 import type { Scene } from '@/lib/slices/scene'
@@ -15,7 +16,7 @@ import { useEditorStore, type EditorState } from '@/lib/store'
 import { viewerApi } from '@/lib/viewer-api'
 import styles from './editor.module.css'
 
-const SHAPE_KEYS = ['neck', 'ribWidth', 'sleeve', 'sleeveLength', 'fit', 'bodyLength', 'shoulder', 'thickness'] as const
+const PARTS: ModelPart[] = ['body', 'sleeveL', 'sleeveR', 'collar']
 
 const LIGHTS = {
   neutral: { env: 0.7, key: 1.4, color: 0xffffff, rim: 0, pos: [-0.9, 3, 1.6] },
@@ -30,12 +31,13 @@ const QUALITY: Record<Quality, { ratio: number; body: number; sleeve: number; sh
 }
 const QUALITY_DOWN: Record<Quality, Quality> = { high: 'medium', medium: 'low', low: 'low' }
 
-const inner = (hex: string) => new THREE.Color(hex).multiplyScalar(0.62)
 const WHITE = new THREE.Color(0xffffff)
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2)
 
 export default function Viewer() {
   const hostRef = useRef<HTMLDivElement>(null)
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  const retryRef = useRef<() => void>(() => {})
 
   useEffect(() => {
     const host = hostRef.current
@@ -109,55 +111,99 @@ export default function Viewer() {
       return t
     }
 
-    const outer = {
-      body: new THREE.MeshPhysicalMaterial(),
-      sleeveL: new THREE.MeshPhysicalMaterial(),
-      sleeveR: new THREE.MeshPhysicalMaterial(),
-      collar: new THREE.MeshPhysicalMaterial(),
+    // Model hanya berisi permukaan luar kain. Sisi belakangnya adalah bagian dalam kaos (terlihat dari leher
+    // dan ujung lengan): digelapkan dan tanpa cetakan. Peta cetak juga hanya tampil di titik bermasker 1
+    // (printAttributes); di luar itu dipakai warna kain dari pojok kanvas, yang selalu polos (paintCanvas).
+    const INSIDE = 'diffuseColor.rgb *= gl_FrontFacing ? 1.0 : 0.62;'
+    const material = (print: boolean) => {
+      const m = new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide })
+      // Dua varian shader dari fungsi yang sama: kunci cache harus berbeda supaya program tidak tertukar.
+      m.customProgramCacheKey = () => (print ? 'kain-cetak' : 'kain')
+      m.onBeforeCompile = (s) => {
+        if (!print) {
+          s.fragmentShader = s.fragmentShader.replace('#include <map_fragment>', INSIDE)
+          return
+        }
+        s.vertexShader = s.vertexShader
+          .replace('#include <common>', '#include <common>\nattribute float printMask;\nvarying float vPrintMask;')
+          .replace('#include <uv_vertex>', '#include <uv_vertex>\nvPrintMask = printMask;')
+        s.fragmentShader = s.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vPrintMask;').replace(
+          '#include <map_fragment>',
+          `diffuseColor *= mix(texture2D(map, vec2(0.001)), texture2D(map, vMapUv), gl_FrontFacing ? vPrintMask : 0.0);\n${INSIDE}`,
+        )
+      }
+      return m
     }
-    const innerMat = {
-      body: new THREE.MeshStandardMaterial({ side: THREE.BackSide, roughness: 1 }),
-      sleeveL: new THREE.MeshStandardMaterial({ side: THREE.BackSide, roughness: 1 }),
-      sleeveR: new THREE.MeshStandardMaterial({ side: THREE.BackSide, roughness: 1 }),
+    const outer: Record<ModelPart, THREE.MeshPhysicalMaterial> = {
+      body: material(true),
+      sleeveL: material(true),
+      sleeveR: material(true),
+      collar: material(false),
     }
     const group = new THREE.Group()
-    const meshes = {
-      body: new THREE.Mesh(new THREE.BufferGeometry(), outer.body),
-      sleeveL: new THREE.Mesh(new THREE.BufferGeometry(), outer.sleeveL),
-      sleeveR: new THREE.Mesh(new THREE.BufferGeometry(), outer.sleeveR),
-      collar: new THREE.Mesh(new THREE.BufferGeometry(), outer.collar),
+    const mesh = (p: ModelPart) => {
+      const m = new THREE.Mesh(new THREE.BufferGeometry(), outer[p])
+      m.castShadow = true
+      return m
     }
-    const innerMeshes = {
-      body: new THREE.Mesh(meshes.body.geometry, innerMat.body),
-      sleeveL: new THREE.Mesh(meshes.sleeveL.geometry, innerMat.sleeveL),
-      sleeveR: new THREE.Mesh(meshes.sleeveR.geometry, innerMat.sleeveR),
-    }
-    Object.values(meshes).forEach((m) => (m.castShadow = true))
-    group.add(...Object.values(meshes), ...Object.values(innerMeshes))
+    const meshes = { body: mesh('body'), sleeveL: mesh('sleeveL'), sleeveR: mesh('sleeveR'), collar: mesh('collar') }
+    group.add(...Object.values(meshes))
     scene.add(group)
 
-    let dims: Dims = garmentDims(store.getState().garment)
-    let collarLength = 0.5
+    let model: ModelId = modelOf(store.getState().garment)
+    let dims: Dims = MODELS[model].dims
     let dirty = true
     let hideGuides = false
+    let disposed = false
     const images = new Map<string, HTMLImageElement>()
     const fontState = new Map<string, 'loading' | 'ready'>()
 
-    // --- bentuk kaos ---
-    function rebuild(g: Garment) {
-      dims = garmentDims(g)
-      const geo = buildGarment(dims)
-      collarLength = geo.collarLength
-      for (const part of ['body', 'sleeveL', 'sleeveR', 'collar'] as const) {
-        meshes[part].geometry.dispose()
-        meshes[part].geometry = geo[part]
-        if (part !== 'collar') innerMeshes[part].geometry = geo[part]
+    // --- model kaos ---
+    const loader = new GLTFLoader()
+    const geometries = new Map<ModelId, Record<ModelPart, THREE.BufferGeometry>>()
+    async function loadModel(id: ModelId) {
+      setStatus('loading')
+      try {
+        let geos = geometries.get(id)
+        if (!geos) {
+          const gltf = await loader.loadAsync(MODELS[id].url)
+          const found = {} as Record<ModelPart, THREE.BufferGeometry>
+          gltf.scene.traverse((o) => {
+            if (o instanceof THREE.Mesh && PARTS.includes(o.name as ModelPart)) found[o.name as ModelPart] = o.geometry
+          })
+          for (const part of PARTS) {
+            const geo = found[part]
+            if (!geo) throw new Error(`bagian ${part} tidak ada`)
+            // Atribut GLB bisa berselang (interleaved), jadi .array tidak bisa dibaca langsung.
+            const attr = (name: string) => {
+              const a = geo.getAttribute(name)
+              return Float32Array.from({ length: a.count * a.itemSize }, (_, k) => a.getComponent(Math.floor(k / a.itemSize), k % a.itemSize))
+            }
+            const a = printAttributes(attr('position'), attr('normal'), part, MODELS[id].dims)
+            // UV asli dipakai tekstur serat (channel 1), UV cetak dipakai kanvas (channel 0).
+            geo.setAttribute('uv1', geo.getAttribute('uv'))
+            geo.setAttribute('uv', new THREE.BufferAttribute(a.uv, 2))
+            geo.setAttribute('printMask', new THREE.BufferAttribute(a.mask, 1))
+          }
+          geos = found
+          geometries.set(id, geos)
+        }
+        // Pengguna bisa sudah memilih lengan lain saat model ini dimuat.
+        if (disposed || id !== modelOf(store.getState().garment)) return
+        model = id
+        dims = MODELS[id].dims
+        for (const part of PARTS) meshes[part].geometry = geos[part]
+        group.position.y = -dims.H * 0.55
+        // Ujung lengan panjang turun sekitar 7 cm di bawah hem.
+        ground.position.y = group.position.y - 0.08
+        applyFabric(store.getState().garment)
+        dirty = true
+        setStatus('ready')
+      } catch {
+        if (!disposed) setStatus('error')
       }
-      group.position.y = -dims.H * 0.55
-      ground.position.y = group.position.y - 0.12
-      applyFabric(g)
-      dirty = true
     }
+    retryRef.current = () => void loadModel(modelOf(store.getState().garment))
 
     // --- bahan ---
     const normalClones: THREE.Texture[] = []
@@ -165,17 +211,11 @@ export default function Viewer() {
       const f = FABRIC[g.material]
       const base = fabricNormalTexture(g.material)
       normalClones.splice(0).forEach((t) => t.dispose())
-      const sf = sleeveFrame(dims)
-      const repeat: Record<keyof typeof outer, [number, number]> = {
-        body: [(4 * BODY_HALF_W) / f.tile, BODY_H / f.tile],
-        sleeveL: [sf.total / f.tile, sf.circAt(0.5) / f.tile],
-        sleeveR: [sf.total / f.tile, sf.circAt(0.5) / f.tile],
-        collar: [collarLength / f.tile, (Math.PI * 2 * dims.rib) / f.tile],
-      }
-      for (const part of Object.keys(outer) as (keyof typeof outer)[]) {
+      for (const part of PARTS) {
         const m = outer[part]
         const n = base.clone()
-        n.repeat.set(...repeat[part])
+        n.channel = 1
+        n.repeat.setScalar(dims.uvMeters / f.tile)
         n.anisotropy = aniso
         normalClones.push(n)
         m.normalMap = n
@@ -191,11 +231,7 @@ export default function Viewer() {
     function applyColors(g: Garment) {
       outer.collar.color.set(g.colors.collar)
       // Kilap serat mengikuti warna kain supaya warna gelap tidak tampak berdebu.
-      for (const part of ['body', 'sleeveL', 'sleeveR', 'collar'] as const)
-        outer[part].sheenColor.set(g.colors[part]).lerp(WHITE, 0.5)
-      innerMat.body.color.copy(inner(g.colors.body))
-      innerMat.sleeveL.color.copy(inner(g.colors.sleeveL))
-      innerMat.sleeveR.color.copy(inner(g.colors.sleeveR))
+      for (const part of PARTS) outer[part].sheenColor.set(g.colors[part]).lerp(WHITE, 0.5)
       dirty = true
     }
 
@@ -324,7 +360,7 @@ export default function Viewer() {
     function presetPose(p: CameraPreset | 'reset') {
       const D = fitDistance()
       const collarY = dims.H * 0.45
-      const sleeveX = dims.shoulder + 0.1
+      const sleeveX = dims.sleeve.x
       const poses: Record<CameraPreset, [number[], number[]]> = {
         front: [[0, 0.05, D], [0, 0, 0]],
         back: [[0, 0.05, -D], [0, 0, 0]],
@@ -448,7 +484,7 @@ export default function Viewer() {
     // --- sinkron dengan store ---
     const initial = store.getState()
     applyQuality(initial.quality)
-    rebuild(initial.garment)
+    void loadModel(model)
     applyColors(initial.garment)
     applyScene(initial.scene)
     goTo('reset', true)
@@ -456,8 +492,8 @@ export default function Viewer() {
     const unsub = store.subscribe((s, p) => {
       const g = s.garment
       if (g !== p.garment) {
-        if (SHAPE_KEYS.some((k) => g[k] !== p.garment[k])) rebuild(g)
-        else if (g.material !== p.garment.material) applyFabric(g)
+        if (modelOf(g) !== modelOf(p.garment)) void loadModel(modelOf(g))
+        else if (g.material !== p.garment.material || g.thickness !== p.garment.thickness) applyFabric(g)
         if (g.colors !== p.garment.colors) applyColors(g)
       }
       if (s.layers !== p.layers || s.selectedId !== p.selectedId || s.showGuides !== p.showGuides) dirty = true
@@ -467,6 +503,7 @@ export default function Viewer() {
     })
 
     return () => {
+      disposed = true
       unsub()
       renderer.setAnimationLoop(null)
       ro.disconnect()
@@ -474,8 +511,8 @@ export default function Viewer() {
       canvas.removeEventListener('webglcontextlost', onLost)
       canvas.removeEventListener('webglcontextrestored', onRestored)
       viewerApi.exportImage = null
-      Object.values(meshes).forEach((m) => m.geometry.dispose())
-      ;[...Object.values(outer), ...Object.values(innerMat)].forEach((m) => m.dispose())
+      geometries.forEach((geos) => Object.values(geos).forEach((g) => g.dispose()))
+      Object.values(outer).forEach((m) => m.dispose())
       Object.values(textures).forEach((t) => t.dispose())
       normalClones.forEach((t) => t.dispose())
       bgTexture?.dispose()
@@ -487,5 +524,22 @@ export default function Viewer() {
     }
   }, [])
 
-  return <div ref={hostRef} className={styles.viewerHost} />
+  return (
+    <>
+      <div ref={hostRef} className={styles.viewerHost} />
+      {status === 'loading' && (
+        <output className={styles.stageMessage}>
+          <p>Menyiapkan kaos 3D</p>
+        </output>
+      )}
+      {status === 'error' && (
+        <div className={styles.stageMessage} role="alert">
+          <p>Kaos 3D belum berhasil dimuat. Periksa koneksi internetmu, lalu tekan Coba Lagi.</p>
+          <button type="button" className="btn btn-secondary" onClick={() => retryRef.current()}>
+            Coba Lagi
+          </button>
+        </div>
+      )}
+    </>
+  )
 }

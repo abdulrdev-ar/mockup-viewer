@@ -4,3 +4,6 @@ out
 next-env.d.ts
 *.tsbuildinfo
 .env*
+
+# Model mentah dari Sketchfab (puluhan MB). Sumber dan cara mengolah: docs/09-aset.md
+assets/models/

@@ -16,6 +16,8 @@ Setiap temuan diberi label [TERAMATI] atau [INFERENSI]. Angka yang tertulis di s
 3. Pacdora memberi editor yang lebih umum (rel menu: Edit, Model, Tata letak, Latar, Video, Lebih banyak). Model kaos hanya menawarkan 4 bagian yang bisa diwarnai (badan utama, lengan, garis leher, garis jahit) dan pilihan material kapas. [TERAMATI]
 4. Versi gratis keduanya memberi watermark pada hasil. Lisensi komersial hanya ada di paket berbayar tertinggi (Pacdora Bisnis) atau paket Pro (VirtualThreads). [TERAMATI]
 5. Tidak ada satu pun yang menawarkan satu editor kaos dengan kontrol warna, gambar, teks, bahan, dan detail model (kerah, lengan, potongan, jahitan) sekaligus pada versi gratis, dengan hasil tanpa watermark. Ini celah utama untuk Mockup Viewer. [TERAMATI untuk yang terlihat. Keterbatasan: panel berbayar dan sebagian tab tidak dibuka.]
+6. TeeMockup (`freeteemockup.com`) sudah gratis, tanpa akun, tanpa watermark, dan memproses gambar di browser. Janji "gratis tanpa watermark" saja tidak lagi membedakan. Pembeda yang tersisa adalah kedalaman kustomisasi satu garmen dan konteks lokal. [TERAMATI, bagian 3a]
+7. Mockup yang tampak paling nyata di antara empat kompetitor (TeeMockup dan Dezo) tidak memakai 3D. Keduanya mewarnai ulang foto garmen asli memakai peta bayangan dan masker. [TERAMATI, bagian 3a dan 3b]
 
 ## 2. VirtualThreads
 
@@ -172,6 +174,119 @@ Lisensi komersial baru muncul di paket $59. Pengguna kaos yang menjual produknya
 
 Arti bagi kita: render di server memunculkan biaya, dan biaya itulah yang membuat watermark dan paket berbayar masuk akal bagi Pacdora. Ekspor di sisi pengguna adalah cara menjaga janji gratis tetap sehat.
 
+### 3.6 Penjelajahan editor model 605371 (pengamatan lanjutan)
+
+| | |
+|---|---|
+| Halaman | `pacdora.com/mockup-detail/short-sleeved-shirt-mockup-605371` ("Men's round neck T-shirt mockup", Model ID 605371) |
+| Alat | MCP Chrome DevTools (Chrome 157, desktop 1440 x 900 dan jendela sempit 500 px), klik setiap kontrol, log jaringan, isi `window` |
+| Akun | Tidak login. Situs memberi cookie token tamu secara otomatis. |
+| Unggahan | Tidak ada. Tombol unggah meminta login sebelum file dipilih. |
+| Aset | Model, tekstur, dan HDR tidak diunduh atau disimpan. Hanya nama berkas dan struktur data yang dicatat (dokumen 07). |
+
+**Pemuatan.** Empat tahap dengan teks: "Building model", "Preparing materials", "Creating environment", "Almost done". [TERAMATI]
+
+**Panel Edit.** [TERAMATI]
+
+| Kontrol | Perilaku |
+|---|---|
+| Upload images | Area cetak 317 x 448 px (model 700004 memakai 310 x 452 px). Input menerima `image/*`, boleh banyak berkas. Klik memunculkan "Log in to upload". Dialog menyebut gambar berlaku untuk semua model di tata letak. |
+| Pratinjau kosong | Kaos memakai tekstur pola logo Pacdora di seluruh permukaan dan teks "Upload your images 317 x 448 px" di dada |
+| Color | Pemilih warna bebas dan palet swatch (6 warna di awal, tinggal putih dan hitam setelah tata letak diganti, penyebab tidak diketahui). Warna dari palet menimpa semua bagian sekaligus. |
+| Custom material | 3 pilihan berupa bola pratinjau: Cotton base, Vertical cotton, Cross knitted. Daftar material global dari API berisi 49 material (kertas, kaca, kain, logam). |
+| Custom part | 4 bagian: Sewing line, Body, Cuff, Neckline. Setiap bagian membuka popover warna (kotak saturasi, slider hue, kolom heksadesimal). "Cuff" mewarnai seluruh lengan, bukan manset saja. Label awal "3 Parts" berubah menjadi "4 Parts" setelah model selesai dimuat. |
+| Find similar with AI | Grid 6 model mirip, dicari lewat `models/image_search` memakai gambar render model |
+
+Data model menyimpan 5 kelompok bagian (主体 badan, 袖子 lengan, 袖口 manset, 领口 kerah, 缝纫线 benang jahit), tetapi editor hanya menampilkan 4. [TERAMATI]
+
+**Tab lain.** [TERAMATI]
+
+| Tab | Isi | Perilaku |
+|---|---|---|
+| Models | Library, Projects, Custom. Pencarian teks ("Try 4+ words to describe...") dan pencarian gambar. 12 kategori (Boxes, Bottles, Apparel, Devices, Prints, dan lain-lain). | Kartu model memakai titik material dan tombol "Replace" |
+| Layout | 12 preset susunan 1 sampai 3 garmen dengan sudut berbeda | Preset depan dan belakang berdampingan berhasil diterapkan. Warna dan material sama untuk semua salinan. Bilah bawah menambah mode tunggal atau grup, slider Spacing, dan atur ulang tampilan. |
+| AI Background | Latar: warna bebas, transparan (pola kotak), 7 warna solid, 14 gradasi dan "See all". "Try AI background": template per kategori (Trending, Minimalism, Indoor, Outdoor, Studio, dan lain-lain) atau Custom (gambar acuan dan prompt 400 karakter), rasio 1:1, 4:3, 3:4, 16:9, 9:16, 4:5, resolusi 1K atau 2K | Latar transparan dan warna berfungsi. Generate AI tidak dijalankan (memakai kredit). |
+| Video | Animation dan AI Video. 12 preset: Rhythm 6s, Rotation 4s, Impact 5s, Rhythm Pro 7s, Entrance Pro 5s, Entrance 6s, Showtime 6s, Showtime Pro 10s, Details Pro 8s, Details 8s, Ascent 6s, Drop 8s | Klik kartu memutar animasi langsung di kanvas dengan hitung mundur. Bilah alat nonaktif selama animasi. Tombol unduh meminta login. |
+| More | Open AI Background Generator, desain dengan software 3D, Pacdora Editor API, AI Poster, AI Packaging Design, Design in Illustrator, Dieline Template Generator | Tautan ke produk lain |
+
+**Bilah alat.** [TERAMATI]
+
+| Lokasi | Kontrol | Perilaku |
+|---|---|---|
+| Kanan | Pilih, geser (hand), komentar, undo, redo | Ctrl+Z membatalkan perubahan warna dan material. Tombol komentar hilang di mode Layout. |
+| Bawah | Zoom keluar dan masuk, bayangan, sudut kamera, "Watermark free" | Bayangan menyalakan bayangan di lantai. Sudut kamera meminta login. |
+| Atas | Menu (Log in, bahasa), ikon awan, "3D Design", Share, Super export | Ikon awan menampilkan "Unsaved changes" dan "Log in to save". Share dan Super export meminta login. |
+| Kanvas | Seret untuk memutar | Berfungsi. Sisi belakang tidak punya area cetak (data model hanya punya satu muka cetak, `F1`). |
+
+**Batas pengguna tamu.** Unggah gambar, sudut kamera, unduh video, Super export, Share, dan simpan ke awan meminta login. Tamu hanya bisa mengubah warna, material, tata letak, dan latar, lalu melihat pratinjau. [TERAMATI]
+
+**Simpan otomatis tamu.** Perubahan pertama membuat proyek di server (`POST /api/v2/projects`, URL berubah menjadi `?id=...`). Setiap perubahan berikutnya mengirim `PUT /api/v2/projects` dan mengunggah tangkapan kanvas ke bucket S3 (`render-cover/*.jpeg` atau `.png`) memakai token sementara dari `/api/v2/home/aws/token`. Ini terjadi walau ikon awan menyebut "Unsaved changes". [TERAMATI]
+
+Isi data proyek yang dikirim (struktur, bukan nilai untuk ditiru): [TERAMATI]
+
+| Bagian | Isi |
+|---|---|
+| `lights` | Peta lingkungan HDR (intensitas, rotasi) dan satu sinar matahari (posisi bola: phi, theta, radius; intensitas; radius bayangan) |
+| `materialSetting` | Satu set parameter `MeshPhysicalMaterial` per bagian: warna, roughness, normal map berulang (pengulangan berbeda untuk badan dan benang jahit), normalScale, aoMapIntensity, specularIntensity, clearcoat, sisi ganda. Ada juga `outsideMaterial` untuk lapisan cetak. |
+| `modelConfig` | Posisi kamera, fov 30, transformasi grup, nilai `fold` |
+| `background*` | Jenis latar (warna, gradasi linear atau radial dengan titik kontrol, transparan) |
+| `partThemeColorData` | Warna aktif dan daftar warna terakhir |
+| `viewState` | Mode (tunggal atau layout), bayangan, ID scene layout, skala jarak, kamera layout |
+
+**Teknologi (pembaruan bagian 3.5).** `window.__THREE__` bernilai `149`, jadi mesin 3D adalah three.js r149 [TERAMATI, sebelumnya INFERENSI]. Kanvas memakai konteks WebGL2. Vue dan Theatre.js terdeteksi di halaman. Pihak ketiga yang aktif selama sesi: GA4, Google Ads dan DoubleClick, Microsoft Clarity, Facebook, Google Sign-In, Freshchat. [TERAMATI]
+
+**Ponsel.** Pada jendela selebar 500 px (batas terkecil browser uji), tata letak tetap versi desktop: tombol kanan atas terpotong dan panel menutupi kanvas. Belum diuji di perangkat nyata atau emulasi ponsel. [TERAMATI, dengan batasan]
+
+**Arti bagi Mockup Viewer.**
+1. Jalur gratis tamu di Pacdora berhenti di pratinjau. Ekspor dan unggah butuh akun. Ini memperkuat celah G2 dan keputusan D-01.
+2. Pacdora mewarnai 4 bagian, dan lengan dihitung satu bagian ("Cuff"). Rencana B2 (badan, lengan kiri dan kanan, rib kerah) sudah lebih dalam.
+3. Tamu mengirim tangkapan kanvas ke server pada setiap perubahan. Janji I7 (gambar tetap di perangkat) menjadi pembeda yang bisa dibuktikan lewat tab jaringan.
+4. Struktur data proyek mereka (material per bagian, cahaya, kamera, latar, mode tampilan) cocok dengan rencana G1. Skema Mockup Viewer tetap dirancang sendiri.
+5. Dua fitur belum ada di katalog dokumen 03: tata letak banyak tampilan dalam satu gambar (depan dan belakang berdampingan) dan preset animasi kamera. [KEPUTUSAN: masukkan ke katalog atau tidak]
+
+## 3a. TeeMockup (`freeteemockup.com/editor`)
+
+Pengamatan 13 November 2026 dengan MCP REA (`capture_browser_scenario`, Chrome 157, 1440 x 900), MCP Chrome DevTools (klik setiap kontrol, unggah gambar uji buatan sendiri), dan Playwright 1.65 (emulasi Pixel 7). Tanpa akun. Aset tidak disimpan.
+
+| Area | Temuan | Label |
+|---|---|---|
+| Mode | Flat Lay (8 garmen: Crewneck, Ladies Tee, Polo Collar, Long Sleeve, Hoodie, Sweatshirt, V-Neck, Tank Top; sisi depan dan belakang) dan On Model (24 foto model dan suasana) | TERAMATI |
+| Warna | 12 swatch bernama dan kolom heksadesimal. Satu warna untuk seluruh garmen. | TERAMATI |
+| Desain | Unggah PNG atau JPG, 3 contoh grafis, seret, pegangan sudut untuk skala, pegangan bawah untuk putar. Slider Size 10 sampai 90, Rotation -180 sampai 180, Opacity 10 sampai 100. | TERAMATI |
+| Realisme | Slider "Fold Shadows" (10 sampai 100) dan "Fabric Shine" (0 sampai 60) | TERAMATI |
+| Latar | Solid, transparan, papan kayu putih, papan kayu cokelat. Kanvas 1:1, 4:3, 4:5, 9:16. Properti dekorasi (tanaman, topi, sepatu, kacamata, jeans, tas, celana pendek, daun). | TERAMATI |
+| Ekspor | Dialog kualitas 1080 x 1080 atau 2160 x 2160, ekspor massal, teks "Free, no watermark, no limit." dan tombol donasi Ko-fi | TERAMATI |
+| Privasi | Setelah unggah gambar, tidak ada permintaan POST atau PUT selain analitik. Gambar tetap di browser. | TERAMATI |
+| Teknologi | Astro. Mesin `flatlay-engine` berbasis Canvas 2D (tanpa WebGL). Analitik GA4 dan Cloudflare. | TERAMATI |
+| Ponsel | Tab bawah (Design, Garment, Canvas, Props), kanvas 378 px, tanpa gulir horizontal | TERAMATI (emulasi) |
+
+**Cara kerja realisme (dari bundle publik, tidak dipakai ulang).** [TERAMATI]
+- Flat Lay: foto kaos asli berlatar transparan. Luminans tiap piksel dipecah menjadi peta bayangan (piksel lebih gelap dari ambang 215 diberi kurva pangkat 1,8) dan peta kilau (piksel di atas ambang). Urutan komposit: masker garmen diisi warna kaos, desain digambar dengan `source-atop`, peta bayangan ditimpa dengan `multiply` (opasitas = Fold Shadows), lalu peta kilau dengan `screen` (opasitas = Fabric Shine).
+- On Model: setiap foto punya tiga berkas: foto, peta bobot (kanal R = cakupan kain, G = pemotongan, B = kepemilikan warna asli), dan peta shade. Warna baru dibuat dari tabel 256 nilai per warna target (gamma berdasarkan terang warna, rona ambien, nilai di atas 1 untuk kilau). Warna asli foto dikurangi dan warna target ditambahkan sesuai bobot tiap piksel.
+
+## 3b. Dezo Industry (`dezoindustry.com/free-mockup-generator/`)
+
+Alat untuk menarik pesanan produksi pabrik garmen di Sialkot. Pengamatan dengan alat yang sama seperti 3a.
+
+| Area | Temuan | Label |
+|---|---|---|
+| Produk | 22 garmen dari foto studio (hoodie, kaos, polo, jaket, celana, topi, kaus kaki) dan "Upload your product" untuk foto produk sendiri | TERAMATI |
+| Warna per bagian | Whole garment, Front body, Back body, Sleeves, Hood, Inside/lining, Cuffs, Hem band, Pocket, Drawcords. 22 swatch bernama dengan heksadesimal dan warna bebas. | TERAMATI |
+| Tekstur | Fabric look: Smooth, Heather, Ribbed knit, Leather grain. 141 motif (camo, tie-dye, garis, kotak, hewan, abstrak) dengan slider ukuran motif, per bagian. | TERAMATI |
+| Logo dan teks | Unggah logo (SVG, AI, PDF, EPS, PSD, PNG, JPG, ZIP), teks dengan 15 font, bold, italic, outline, lengkung, jarak huruf. Zona: dada tengah, dada kiri, dada kanan, depan bawah, lengan kiri, lengan kanan. Ukuran dalam inci atau cm. | TERAMATI |
+| Jenis dekorasi | 24 pilihan, antara lain sablon, DTG/DTF, puff, foil, rhinestone, bordir datar dan 3D, chenille, patch | TERAMATI |
+| Alat lain | Undo, redo, grid, area aman, zoom, putar 360, 150 suasana gaya hidup, line sheet, desain AI, vektorisasi logo | TERAMATI |
+| Pratinjau | Kanvas 2D dengan watermark "© DEZO INDUSTRY" | TERAMATI |
+| Privasi | Teks "Your files go only to Dezo". Halaman mengirim beberapa `POST admin-ajax.php` saat dimuat. Formulir penawaran melampirkan gambar mockup otomatis. | TERAMATI |
+| Teknologi | WordPress, skrip tema `mockup.js` (146 KB) dan modul terpisah per fitur | TERAMATI |
+
+**Cara kerja realisme.** Setiap garmen punya foto (`mockups/{produk}-{sisi}.webp`) dan masker (`mockups/masks/{produk}-{sisi}.webp`). Masker menyimpan nomor bagian di kanal warna. Logo digambar di atas foto dengan `soft-light` (opasitas berbeda per jenis dekorasi) lalu dipotong dengan `destination-in` sesuai masker. [TERAMATI pada nama berkas dan bundle, rincian pewarnaan per bagian INFERENSI]
+
+**Arti bagi Mockup Viewer.**
+1. Kesan "nyata" di kedua alat ini datang dari foto garmen asli. Bayangan lipatan dan kilau diambil dari luminans foto, tidak dihitung dari geometri.
+2. Mesin 3D prosedural Mockup Viewer (badan superelips, lengan silinder, kerah tabung) tidak punya lipatan nyata, sehingga tidak akan menyamai foto hanya dengan mengubah material. [KEPUTUSAN: pendekatan pratinjau, foto 2D, model 3D hasil simulasi kain, atau gabungan]
+3. Kontrol yang layak ditiru polanya: slider bayangan lipatan dan kilau kain, ukuran cetak dalam cm, warna per bagian dengan masker, area aman.
+
 ## 4. Perbandingan fitur
 
 Kolom Mockup Viewer menunjukkan rencana (fase di dokumen 03), bukan kondisi sekarang.
@@ -220,7 +335,7 @@ Semua hipotesis di atas berasal dari pengamatan satu hari. Uji dengan wawancara 
 | Batasan | Dampak |
 |---|---|
 | Chromium headless, bukan perangkat nyata | Performa WebGL dan tampilan kualitas tidak diukur |
-| Tab Model, Tata letak, Latar, Video di Pacdora tidak berhasil dibuka satu per satu, dan panel berbayar tidak diakses | Fitur yang ada di sana belum tercatat. Daftar fitur kompetitor tidak lengkap. |
+| Tab Model, Tata letak, Latar, Video di Pacdora sudah dibuka pada model 605371 (bagian 3.6). Fitur yang meminta login dan AI berbayar tidak dijalankan. | Perilaku ekspor, unggah, berbagi, dan hasil AI Pacdora belum tercatat |
 | Tidak login dan tidak membayar | Isi paket berbayar hanya dari halaman harga |
 | Penyelidikan bundle memakai pencocokan string | Penyebutan three.js dan MediaRecorder berstatus INFERENSI |
 | Angka sosial dan pengguna dari situs mereka | Tidak dipakai sebagai data pasar |
@@ -230,7 +345,7 @@ Bukti sesi analisis (ID Evidence REA): VirtualThreads `/updates` `ev_31949505546
 
 ## 8. Langkah riset lanjutan
 
-1. Telusuri tab Model, Tata letak, Latar, dan Video di Pacdora secara manual untuk melengkapi daftar fitur.
-2. Coba alat teks dan unggah gambar nyata di kedua editor, catat batas ukuran dan format file.
+1. Selesai untuk Pacdora model 605371 (bagian 3.6).
+2. Coba alat teks dan unggah gambar nyata di VirtualThreads. Di Pacdora, unggah meminta login, jadi batas ukuran dan format file belum tercatat.
 3. Uji kedua editor di ponsel kelas menengah, catat waktu muat dan kelancaran.
 4. Tambahkan 2 sampai 3 kompetitor lain (alat mockup 2D dan PSD, serta alat 3D lain) setelah wawancara pengguna menyebut nama yang mereka pakai.

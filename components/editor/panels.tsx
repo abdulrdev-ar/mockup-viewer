@@ -168,62 +168,38 @@ export function MaterialPanel() {
 
 const pct = (v: number) => `${Math.round(v * 100)}%`
 
+// Kerah, potongan, dan lengan tiga perempat menunggu model 3D (docs/09-aset.md).
 export function ShapePanel() {
-  const g = useEditorStore((s) => s.garment)
+  const sleeve = useEditorStore((s) => s.garment.sleeve)
   const setGarment = useEditorStore((s) => s.setGarment)
   return (
     <>
-      <Section title="Kerah">
-        <Segmented
-          label="Bentuk kerah"
-          value={g.neck}
-          options={[
-            { value: 'crew', label: 'Bulat' },
-            { value: 'v', label: 'V' },
-            { value: 'scoop', label: 'Scoop' },
-          ]}
-          onChange={(v) => setGarment({ neck: v })}
-        />
-        <Segmented
-          label="Lebar rib kerah"
-          value={g.ribWidth}
-          options={[
-            { value: 'thin', label: 'Rib tipis' },
-            { value: 'standard', label: 'Rib standar' },
-            { value: 'thick', label: 'Rib tebal' },
-          ]}
-          onChange={(v) => setGarment({ ribWidth: v })}
-        />
-      </Section>
       <Section title="Lengan">
         <Segmented
           label="Bentuk lengan"
-          value={g.sleeve}
+          value={sleeve === 'long' ? 'long' : 'short'}
           options={[
             { value: 'short', label: 'Pendek' },
-            { value: 'threeQuarter', label: 'Tiga perempat' },
             { value: 'long', label: 'Panjang' },
           ]}
           onChange={(v) => setGarment({ sleeve: v })}
         />
-        <Slider label="Panjang lengan" value={g.sleeveLength} min={0.8} max={1.2} step={0.01} format={pct} onChange={(v) => setGarment({ sleeveLength: v })} />
       </Section>
-      <Section title="Potongan">
-        <Segmented
-          label="Potongan"
-          value={g.fit}
-          options={[
-            { value: 'slim', label: 'Ramping' },
-            { value: 'regular', label: 'Reguler' },
-            { value: 'boxy', label: 'Boxy' },
-            { value: 'oversized', label: 'Oversized' },
-            { value: 'cropped', label: 'Cropped' },
-          ]}
-          onChange={(v) => setGarment({ fit: v })}
-        />
-        <Slider label="Panjang badan" value={g.bodyLength} min={0.85} max={1.15} step={0.01} format={pct} onChange={(v) => setGarment({ bodyLength: v })} />
-        <Slider label="Lebar bahu" value={g.shoulder} min={0.9} max={1.1} step={0.01} format={pct} onChange={(v) => setGarment({ shoulder: v })} />
-      </Section>
+      <p className={styles.note}>
+        Model 3D:{' '}
+        <a href="https://sketchfab.com/3d-models/short-sleeve-t-shirt-0b1df31312444436b390a687875bdbfe" target="_blank" rel="noopener noreferrer">
+          Short Sleeve T-Shirt
+        </a>{' '}
+        dan{' '}
+        <a href="https://sketchfab.com/3d-models/long-sleeve-t-shirt-ef22cf345c174b569fdfa6a653a6bf6f" target="_blank" rel="noopener noreferrer">
+          Long Sleeve T-Shirt
+        </a>{' '}
+        oleh chokybali, lisensi{' '}
+        <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">
+          CC BY 4.0
+        </a>
+        , disederhanakan untuk web.
+      </p>
     </>
   )
 }

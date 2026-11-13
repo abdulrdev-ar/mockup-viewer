@@ -36,6 +36,7 @@ Saat ini model yang tersedia hanya kaos polos. Fokus ini disengaja: satu produk 
 | 06 | [Roadmap, metrik, dan risiko](06-roadmap-metrik-risiko.md) | Fase, kriteria selesai, KPI, rencana pelacakan, daftar risiko | Seluruh tim |
 | 07 | [Legal, etika, dan kepatuhan](07-legal-etika-kepatuhan.md) | Batas reverse engineering, hak kekayaan intelektual, privasi, syarat layanan | Pemilik produk, penasihat hukum |
 | 08 | [Copywriting](08-copywriting.md) | Teks landing page, teks di dalam editor, FAQ, meta SEO | Pemasaran, desain, pengembang |
+| 09 | [Daftar aset dan model yang dibutuhkan](09-aset.md) | Sumber dan lisensi setiap aset, cara mengolah model, model yang belum ada | Pemilik produk, pengembang, seniman 3D |
 
 ## Keputusan
 

@@ -30,9 +30,6 @@ const CAMERAS: { id: CameraPreset; label: string }[] = [
 ]
 
 const LABEL = {
-  fit: { slim: 'ramping', regular: 'reguler', boxy: 'boxy', oversized: 'oversized', cropped: 'cropped' },
-  neck: { crew: 'bulat', v: 'V', scoop: 'scoop' },
-  sleeve: { short: 'pendek', threeQuarter: 'tiga perempat', long: 'panjang' },
   material: { combed: 'katun combed', carded: 'katun carded', dryfit: 'polyester dry-fit', pique: 'pique' },
 }
 
@@ -132,7 +129,7 @@ export default function Editor() {
   }
 
   const active = PANELS.find((p) => p.id === panel) ?? PANELS[0]
-  const description = `Kaos potongan ${LABEL.fit[g.fit]}, kerah ${LABEL.neck[g.neck]}, lengan ${LABEL.sleeve[g.sleeve]}, bahan ${LABEL.material[g.material]}, warna badan ${g.colors.body}. ${layerCount === 0 ? 'Belum ada desain.' : `${layerCount} desain terpasang.`}`
+  const description = `Kaos kerah bulat, lengan ${g.sleeve === 'long' ? 'panjang' : 'pendek'}, bahan ${LABEL.material[g.material]}, warna badan ${g.colors.body}. ${layerCount === 0 ? 'Belum ada desain.' : `${layerCount} desain terpasang.`}`
 
   return (
     <div className={styles.shell} ref={shellRef}>

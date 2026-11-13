@@ -133,7 +133,7 @@ function LayerEditor({ layer }: { layer: Layer }) {
           Luruskan
         </button>
       </div>
-      <p className={styles.note}>Zona {ZONE_LABEL[layer.zone].toLowerCase()} berukuran {cm(size.w)} x {cm(size.h)} pada kaos ukuran M.</p>
+      <p className={styles.note}>Zona {ZONE_LABEL[layer.zone].toLowerCase()} berukuran {cm(size.w)} x {cm(size.h)}, diukur dari tampak depan model kaos ini.</p>
     </Section>
   )
 }

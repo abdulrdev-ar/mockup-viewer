@@ -1,4 +1,4 @@
-import { BODY_H, BODY_HALF_W, sleeveFrame, type Dims } from './garment.ts'
+import { BODY_H, BODY_HALF_W, SLEEVE_SPAN, type Dims } from './garment.ts'
 import type { FontId, ImageLayer, Layer, TextLayer, Zone } from './slices/design.ts'
 import type { Garment } from './slices/garment.ts'
 
@@ -18,19 +18,18 @@ export const ZONE_LABEL: Record<Zone, string> = {
 
 const DEG = Math.PI / 180
 
-/** Ukuran zona dalam cm untuk kaos dengan dimensi d. */
+/** Ukuran zona dalam cm untuk kaos dengan dimensi d. Lebar diukur pada tampak depan (proyeksi datar). */
 export function zoneSize(d: Dims, zone: Zone): { w: number; h: number } {
   if (zone === 'front') {
     const top = d.H - d.dropFront - 0.06
-    return { w: Math.min(30, d.chest * 200 * 0.62), h: Math.min(40, (top - 0.1) * 100) }
+    return { w: Math.min(30, d.chest * 200 * 0.8), h: Math.min(40, (top - 0.1) * 100) }
   }
   if (zone === 'back') {
     const top = d.H - d.dropBack - 0.08
-    return { w: Math.min(32, d.chest * 200 * 0.65), h: Math.min(42, (top - 0.1) * 100) }
+    return { w: Math.min(32, d.chest * 200 * 0.85), h: Math.min(42, (top - 0.1) * 100) }
   }
   if (zone === 'chestLeft') return { w: 10, h: 10 }
-  const f = sleeveFrame(d)
-  return { w: Math.min(9, f.circAt(f.sCenter) * 100 * 0.4), h: Math.min(9, d.sleeveLen * 100 - 4) }
+  return { w: 8, h: 8 }
 }
 
 export function zoneFrames(d: Dims, bodyW: number, sleeveSize: number): Record<Zone, ZoneFrame> {
@@ -39,17 +38,16 @@ export function zoneFrames(d: Dims, bodyW: number, sleeveSize: number): Record<Z
   const frontX = (x: number) => (x + BODY_HALF_W) * ppc * 100
   const backX = (x: number) => bodyW / 2 + (-x + BODY_HALF_W) * ppc * 100
   const rowY = (y: number) => bodyH - y * ppc * 100
-  const f = sleeveFrame(d)
   const front = zoneSize(d, 'front')
   const back = zoneSize(d, 'back')
+  // Kanvas lengan berpusat di titik cetak lengan (lihat printAttributes), tegak seperti dilihat dari samping.
   const sleeve = (canvas: CanvasId): ZoneFrame => ({
     canvas,
-    cx: f.sCenter * sleeveSize,
+    cx: sleeveSize / 2,
     cy: sleeveSize / 2,
-    sx: sleeveSize / (f.total * 100),
-    sy: sleeveSize / (f.circAt(f.sCenter) * 100),
-    // Atas cetakan mengarah ke bahu.
-    rot: -90,
+    sx: sleeveSize / (SLEEVE_SPAN * 100),
+    sy: sleeveSize / (SLEEVE_SPAN * 100),
+    rot: 0,
     ...zoneSize(d, 'sleeveL'),
   })
   return {

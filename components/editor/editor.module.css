@@ -171,6 +171,11 @@
   color: var(--ink-muted);
 }
 
+.note a:hover {
+  color: var(--on-surface);
+  text-decoration-thickness: 2px;
+}
+
 .segmented {
   display: flex;
   flex-wrap: wrap;

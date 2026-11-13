@@ -1,11 +1,11 @@
 // Pemeriksaan logika inti tanpa browser: `pnpm check`.
 import assert from 'node:assert/strict'
-import * as THREE from 'three'
+import { readFileSync } from 'node:fs'
 import { fabricNormalData } from '../lib/fabric.ts'
-import { buildGarment, garmentDims, sleeveFrame } from '../lib/garment.ts'
+import { BODY_H, MODELS, printAttributes } from '../lib/garment.ts'
 import { clampToZone, dpiOf, zoneFrames, zoneSize, ZONES } from '../lib/print.ts'
 import type { ImageLayer } from '../lib/slices/design.ts'
-import { DEFAULT_GARMENT, type Fit, type Neck, type Sleeve } from '../lib/slices/garment.ts'
+import { DEFAULT_GARMENT } from '../lib/slices/garment.ts'
 import { flushHistory, redo, undo, useEditorStore } from '../lib/store.ts'
 
 // 1. Normal map bahan valid (komponen z selalu menghadap keluar).
@@ -15,66 +15,46 @@ for (const id of ['combed', 'carded', 'dryfit', 'pique'] as const) {
   for (let i = 0; i < d.length; i += 4) assert.ok(d[i + 2] >= 127, `${id}: normal z ke dalam`)
 }
 
-// 2. Semua kombinasi bentuk menghasilkan geometri sehat dengan normal menghadap keluar.
-const fits: Fit[] = ['slim', 'regular', 'boxy', 'oversized', 'cropped']
-const necks: Neck[] = ['crew', 'v', 'scoop']
-const sleeves: Sleeve[] = ['short', 'threeQuarter', 'long']
-for (const fit of fits)
-  for (const neck of necks)
-    for (const sleeve of sleeves) {
-      const label = `${fit}/${neck}/${sleeve}`
-      const d = garmentDims({ ...DEFAULT_GARMENT, fit, neck, sleeve, bodyLength: 1.15 })
-      const g = buildGarment(d)
-      for (const geo of [g.body, g.sleeveL, g.sleeveR, g.collar]) {
-        const p = geo.getAttribute('position').array
-        for (const v of p) assert.ok(Number.isFinite(v), `${label}: posisi tidak valid`)
-      }
-      // Badan: titik tengah depan setinggi dada, normal mengarah +z.
-      const pos = g.body.getAttribute('position')
-      const nor = g.body.getAttribute('normal')
-      let best = -1
-      let bestScore = Infinity
-      for (let i = 0; i < pos.count; i++) {
-        const score = Math.abs(pos.getX(i)) + Math.abs(pos.getY(i) - d.H * 0.4) - pos.getZ(i)
-        if (score < bestScore) {
-          bestScore = score
-          best = i
-        }
-      }
-      assert.ok(nor.getZ(best) > 0.5, `${label}: normal badan depan ke dalam`)
-      // UV badan di dalam kanvas.
-      const uv = g.body.getAttribute('uv')
-      for (let i = 0; i < uv.count; i++) {
-        assert.ok(uv.getX(i) >= 0 && uv.getX(i) <= 1 && uv.getY(i) >= 0 && uv.getY(i) <= 1, `${label}: UV keluar`)
-      }
-      // Lengan: normal searah vektor dari sumbu ke permukaan.
-      for (const [geo, side] of [[g.sleeveL, 1], [g.sleeveR, -1]] as const) {
-        const sp = geo.getAttribute('position')
-        const sn = geo.getAttribute('normal')
-        const f = sleeveFrame(d)
-        const up = new THREE.Vector3(side * Math.sin(d.sleeveAngle), Math.cos(d.sleeveAngle), 0)
-        const i = 10 * 49 + 24 // baris tengah, sisi luar (p = pi)
-        const n = new THREE.Vector3(sn.getX(i), sn.getY(i), sn.getZ(i))
-        assert.ok(n.dot(up) > 0.5, `${label}: normal lengan ke dalam (sisi ${side}, total ${f.total.toFixed(2)})`)
-        assert.ok(sp.count === 29 * 49)
-      }
-      // Zona cetak di dalam kanvas.
-      const frames = zoneFrames(d, 4096, 1024)
-      for (const z of ZONES) {
-        const fr = frames[z]
-        const size = zoneSize(d, z)
-        assert.ok(size.w > 0 && size.h > 0, `${label}: zona ${z} kosong`)
-        const limit = fr.canvas === 'body' ? [4096, 2048] : [1024, 1024]
-        assert.ok(fr.cx > 0 && fr.cx < limit[0] && fr.cy > 0 && fr.cy < limit[1], `${label}: zona ${z} di luar kanvas`)
-      }
-    }
+// 2. Berkas model punya keempat bagian, dan ukuran di MODELS cocok dengan isinya (salin ulang dari `pnpm prepare-model`).
+for (const [id, m] of Object.entries(MODELS)) {
+  const glb = readFileSync(new URL(`../public${m.url}`, import.meta.url))
+  const json = JSON.parse(glb.subarray(20, 20 + glb.readUInt32LE(12)).toString('utf8'))
+  const names: string[] = json.nodes.map((n: { name: string }) => n.name)
+  for (const part of ['body', 'sleeveL', 'sleeveR', 'collar']) assert.ok(names.includes(part), `${id}: bagian ${part} tidak ada`)
+  const body = json.nodes.find((n: { name: string }) => n.name === 'body')
+  const max = json.accessors[json.meshes[body.mesh].primitives[0].attributes.POSITION].max
+  assert.ok(Math.abs(max[1] - m.dims.H) < 0.002, `${id}: tinggi model ${max[1]} tidak sama dengan dims.H ${m.dims.H}`)
+  assert.ok(m.dims.H < BODY_H, `${id}: model lebih tinggi dari kanvas badan`)
 
-// 3. Hitungan cetak.
+  // Zona cetak di dalam kanvas.
+  const frames = zoneFrames(m.dims, 4096, 1024)
+  for (const z of ZONES) {
+    const fr = frames[z]
+    const size = zoneSize(m.dims, z)
+    assert.ok(size.w > 0 && size.h > 0, `${id}: zona ${z} kosong`)
+    const limit = fr.canvas === 'body' ? [4096, 2048] : [1024, 1024]
+    assert.ok(fr.cx > 0 && fr.cx < limit[0] && fr.cy > 0 && fr.cy < limit[1], `${id}: zona ${z} di luar kanvas`)
+  }
+}
+
+// 3. UV cetak: depan ke separuh kiri kanvas badan, belakang ke kanan.
+const d = MODELS.short.dims
+const sp = d.sleeve
+const pa = printAttributes([0, 0.4, 0.1, 0, 0.4, -0.1], [0, 0, 1, 0, 0, -1], 'body', d)
+assert.deepEqual([pa.uv[0], +pa.uv[1].toFixed(4), pa.mask[0]], [0.25, +(0.4 / BODY_H).toFixed(4), 1])
+assert.deepEqual([pa.uv[2], pa.mask[1]], [0.75, 1])
+// Sisi luar lengan di titik cetak jatuh di tengah kanvas lengan, lengan kanan dicerminkan. Sisi yang menghadap badan tidak tercetak.
+for (const [part, side] of [['sleeveL', 1], ['sleeveR', -1]] as const) {
+  const a = printAttributes([side * sp.x, sp.y, sp.z, side * 0.2, sp.y, sp.z], [side, 0, 0, -side, 0, 0], part, d)
+  assert.deepEqual([a.uv[0], a.uv[1], a.mask[0], a.mask[1]], [0.5, 0.5, 1, 0], `${part}: cetakan lengan salah tempat`)
+}
+
+// 4. Hitungan cetak.
 const img: ImageLayer = { id: 'a', kind: 'image', zone: 'front', x: 50, y: -50, rotation: 0, src: '', pxW: 1200, pxH: 600, width: 20 }
 assert.equal(Math.round(dpiOf(img)), 152)
 assert.deepEqual(clampToZone(img, { w: 30, h: 40 }), { x: 5, y: -15 })
 
-// 4. Riwayat: satu rentetan perubahan = satu langkah undo.
+// 5. Riwayat: satu rentetan perubahan = satu langkah undo.
 useEditorStore.setState({ hydrated: true })
 const s = useEditorStore.getState()
 s.setPartColor('body', '#111111')
