@@ -119,8 +119,8 @@ Semua fitur berlaku untuk model kaos polos. Fitur yang butuh aset 3D tambahan di
 - **Acuan:** VT dan PD punya.
 
 ### C2. Tempatkan di area cetak [Fase 1]
-- **Teks produk:** "Pilih letaknya: dada, punggung, lengan, atau logo di dada kiri."
-- **Perilaku:** Zona cetak: dada tengah, dada kiri (logo), punggung, lengan kiri, lengan kanan. Fase 2 menambah kerah belakang dan label. Zona ditampilkan sebagai panduan tipis yang bisa disembunyikan.
+- **Teks produk:** "Seret ke mana saja di depan, belakang, atau lengan."
+- **Perilaku:** Kanvas desain 2D bergaya Canva dengan satu halaman per sisi (Depan, Belakang, Lengan kiri, Lengan kanan). Halaman = area cetak sisi itu. Lapisan diseret bebas di dalam area cetak, logo dada kiri cukup digeser ke posisinya. Pratinjau 3D ikut berubah langsung. Fase 2 menambah kerah belakang dan label. Area cetak tampil sebagai garis tipis di 3D yang bisa disembunyikan.
 - **Acuan:** PD punya area cetak (310 x 452 px pada satu model). VT tidak terlihat.
 
 ### C3. Atur ukuran, putaran, dan posisi [Fase 1]

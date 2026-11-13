@@ -37,23 +37,6 @@
   gap: 8px;
 }
 
-.main {
-  display: grid;
-  min-height: 0;
-}
-
-.stageWrap {
-  display: grid;
-  grid-template-rows: 1fr auto;
-  min-width: 0;
-}
-
-.stage {
-  position: relative;
-  height: 52dvh;
-  min-height: 320px;
-  background: var(--neutral);
-}
 
 /* Papan catur menandai latar transparan. */
 .stageTransparent {
@@ -111,48 +94,6 @@
   background: var(--muted-accent);
 }
 
-.panel {
-  background: var(--surface);
-  border-top: 1px solid var(--border);
-  padding: 16px;
-}
-
-.tabs {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-}
-
-.tab {
-  min-height: 44px;
-  padding: 8px 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-full);
-  background: transparent;
-  color: var(--secondary);
-  cursor: pointer;
-  text-align: center;
-}
-
-.tab:hover {
-  background: var(--neutral);
-}
-
-.tab[aria-selected='true'] {
-  background: var(--muted-accent);
-  border-color: var(--muted-accent);
-}
-
-.panelBody {
-  display: grid;
-  gap: 4px;
-  padding-top: 4px;
-}
-
-.panelBody > :global(.btn) {
-  justify-self: start;
-  margin-top: 12px;
-}
 
 .section {
   display: grid;
@@ -525,58 +466,435 @@ textarea.input {
   cursor: pointer;
 }
 
-/* Tablet: panel di bawah kanvas, isi dibatasi supaya tidak terlalu lebar. */
-@media (min-width: 640px) {
-  .header {
-    padding: 12px 24px;
-  }
 
-  .stage {
-    height: 58dvh;
-  }
+/* --- Tata letak editor, pola Canva: rel alat, panel alat, kanvas desain, pratinjau 3D --- */
 
-  .panel {
-    padding: 20px max(24px, calc((100% - 720px) / 2));
-  }
+.main {
+  display: grid;
+  min-height: 0;
+  grid-template-areas: 'toggle' 'work' 'rail' 'panel';
+}
 
-  .tabs {
-    grid-template-columns: repeat(6, 1fr);
+.rail {
+  grid-area: rail;
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.railItem {
+  flex: none;
+  min-height: 44px;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.railItem:hover {
+  background: var(--neutral);
+}
+
+/* Penanda posisi: warna dan garis bawah, supaya tidak hanya mengandalkan warna. */
+.railItem[aria-selected='true'] {
+  background: var(--muted-accent);
+  box-shadow: inset 0 -2px 0 var(--secondary);
+}
+
+.panel {
+  grid-area: panel;
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 0 16px 24px;
+  background: var(--surface);
+}
+
+.panel > :global(.btn) {
+  justify-self: start;
+  margin-top: 12px;
+}
+
+.viewToggle {
+  grid-area: toggle;
+  padding: 10px 16px;
+}
+
+.workspace,
+.preview {
+  grid-area: work;
+  min-width: 0;
+  min-height: 0;
+}
+
+.workspace[data-hidden='true'],
+.preview[data-hidden='true'] {
+  display: none;
+}
+
+.workspace {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  height: 64dvh;
+  min-height: 420px;
+}
+
+.surfaceBar {
+  padding: 4px 16px 10px;
+}
+
+.preview {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  height: 64dvh;
+  min-height: 420px;
+}
+
+.stage {
+  position: relative;
+  min-height: 0;
+  background: var(--neutral);
+}
+
+/* Bilah konteks: hanya berisi pengaturan lapisan yang dipilih. */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 16px;
+  background: var(--surface);
+  border-block: 1px solid var(--border);
+}
+
+.toolbarHint {
+  min-height: 57px;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+/* Label di samping kolom supaya bilah tetap satu baris di layar lebar. */
+.toolField {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toolField .input {
+  width: auto;
+  min-height: 40px;
+  padding: 7px 10px;
+  font-size: 14px;
+}
+
+.toolText textarea {
+  width: min(200px, 50vw);
+  resize: none;
+}
+
+.inputNarrow {
+  width: 72px;
+}
+
+.toolColor {
+  width: 44px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: none;
+  cursor: pointer;
+}
+
+.toolInfo {
+  align-self: center;
+  color: var(--ink-muted);
+}
+
+.toolGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.toolWarning {
+  flex-basis: 100%;
+  font-size: 13px;
+  color: var(--error);
+}
+
+.more {
+  position: relative;
+}
+
+.more > summary {
+  list-style: none;
+}
+
+.more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.moreBody {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 20;
+  display: grid;
+  gap: 12px;
+  width: 280px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: 0 8px 24px rgba(17, 42, 51, 0.12);
+}
+
+/* Halaman desain: area cetak satu sisi kaos di atas meja kerja. Bayangan tipis memisahkan halaman dari meja. */
+.pageHost {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--neutral);
+  user-select: none;
+}
+
+.pageDrop {
+  outline: 2px dashed var(--primary);
+  outline-offset: -8px;
+}
+
+.page {
+  position: relative;
+  margin: 0;
+  touch-action: none;
+  box-shadow: 0 1px 2px rgba(17, 42, 51, 0.12), 0 8px 24px rgba(17, 42, 51, 0.08);
+}
+
+.pageCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.pageEmpty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-muted);
+  background: rgba(255, 255, 255, 0.6);
+  pointer-events: none;
+}
+
+.pageMeta {
+  position: absolute;
+  left: 16px;
+  bottom: 6px;
+  color: var(--ink-muted);
+  pointer-events: none;
+}
+
+.hoverBox,
+.selectBox {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: center;
+  pointer-events: none;
+}
+
+.hoverBox {
+  outline: 1px dashed var(--primary);
+}
+
+.selectBox {
+  outline: 1.5px solid var(--primary);
+}
+
+.handle,
+.rotateHandle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: var(--surface);
+  border: 1.5px solid var(--primary);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+/* Area sentuh pegangan lebih besar dari gambarnya. */
+.handle::before,
+.rotateHandle::before {
+  content: '';
+  position: absolute;
+  inset: -12px;
+}
+
+.handle {
+  border-radius: 3px;
+}
+
+.handle_nw {
+  left: -7px;
+  top: -7px;
+  cursor: nwse-resize;
+}
+
+.handle_ne {
+  right: -7px;
+  top: -7px;
+  cursor: nesw-resize;
+}
+
+.handle_se {
+  right: -7px;
+  bottom: -7px;
+  cursor: nwse-resize;
+}
+
+.handle_sw {
+  left: -7px;
+  bottom: -7px;
+  cursor: nesw-resize;
+}
+
+.rotateHandle {
+  left: calc(50% - 7px);
+  top: -34px;
+  border-radius: 50%;
+  cursor: grab;
+}
+
+.rotateHandle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  height: 20px;
+  border-left: 1.5px solid var(--primary);
+}
+
+@media (pointer: coarse) {
+  .handle::before,
+  .rotateHandle::before {
+    inset: -16px;
   }
 }
 
-/* Desktop: kanvas di kiri, panel 380 px di kanan, keduanya setinggi layar. */
+.presets {
+  display: grid;
+  gap: 8px;
+}
+
+.preset {
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+}
+
+.preset:hover {
+  background: var(--muted-accent);
+}
+
+.presetTitle {
+  font-size: 22px;
+  letter-spacing: -0.26px;
+}
+
+.presetSub {
+  font-size: 17px;
+}
+
+.presetSmall {
+  font-size: 13px;
+}
+
+.layerGrip {
+  padding-left: 8px;
+  color: var(--ink-muted);
+  cursor: grab;
+}
+
+.layerDragging {
+  opacity: 0.5;
+}
+
+/* Tablet dan laptop kecil: rel tegak dan panel di kiri, kanvas atau pratinjau di kanan. */
 @media (min-width: 1024px) {
   .shell {
     height: 100dvh;
   }
 
   .main {
-    grid-template-columns: minmax(0, 1fr) 380px;
+    grid-template-columns: 96px 300px minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: 'rail panel toggle' 'rail panel work';
     overflow: hidden;
   }
 
-  .stageWrap {
-    min-height: 0;
+  .rail {
+    flex-direction: column;
+    overflow: auto;
+    border-top: 0;
+    border-right: 1px solid var(--border);
   }
 
-  .stage {
-    height: auto;
-    min-height: 0;
+  .railItem {
+    text-align: left;
   }
 
   .panel {
-    border-top: 0;
-    border-left: 1px solid var(--border);
-    padding: 20px;
     overflow-y: auto;
+    border-right: 1px solid var(--border);
   }
 
-  .tabs {
-    grid-template-columns: repeat(3, 1fr);
+  .workspace,
+  .preview {
+    height: auto;
+    min-height: 0;
+  }
+}
+
+/* Layar lebar: kanvas desain dan pratinjau 3D berdampingan, sakelar tampilan tidak perlu. */
+@media (min-width: 1280px) {
+  .main {
+    grid-template-columns: 96px 300px minmax(0, 1fr) minmax(300px, 28%);
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: 'rail panel work preview';
   }
 
-  .cameraBar {
-    flex-wrap: wrap;
-    overflow: visible;
+  .viewToggle {
+    display: none;
+  }
+
+  .workspace[data-hidden='true'] {
+    display: grid;
+  }
+
+  .preview {
+    grid-area: preview;
+    border-left: 1px solid var(--border);
+  }
+
+  .preview[data-hidden='true'] {
+    display: grid;
   }
 }

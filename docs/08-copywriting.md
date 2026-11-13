@@ -178,7 +178,7 @@ Kalimat "unduh tanpa watermark" dan "gratis" baru dipakai setelah D-02 dan model
 
 | Tempat | Teks |
 |---|---|
-| Panel | Unggah, Warna, Gambar, Tulisan, Bahan, Detail, Latar dan Cahaya, Unduh |
+| Rel alat | Unggah, Teks, Lapisan, Warna, Bahan, Lengan, Latar, Unduh |
 | Tombol unggah | Unggah Gambar |
 | Tombol tulisan | Tambah Tulisan |
 | Tombol unduh | Unduh Gambar |
@@ -196,7 +196,9 @@ Kalimat "unduh tanpa watermark" dan "gratis" baru dipakai setelah D-02 dan model
 |---|---|
 | Kotak teks | Ketik tulisanmu di sini |
 | Kolom kode warna | Kode warna, contoh #1F2937 |
-| Pilih zona | Dada, Dada kiri, Punggung, Lengan kiri, Lengan kanan |
+| Sisi kaos (tab di atas kanvas) | Depan, Belakang, Lengan kiri, Lengan kanan |
+| Tombol tulisan | Tambah Judul, Tambah Subjudul, Tambah Teks Kecil |
+| Bilah konteks | Tulisan, Font, Tinggi, Warna, Rata, Lebar, Lainnya, Ke Depan, Ke Belakang, Duplikat, Hapus |
 | Pilih bagian | Badan, Lengan kiri, Lengan kanan, Rib kerah |
 | Kerah | Bulat, V, Scoop |
 | Lengan | Pendek, Tiga perempat, Panjang |

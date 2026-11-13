@@ -66,4 +66,15 @@ assert.equal(useEditorStore.getState().garment.colors.body, DEFAULT_GARMENT.colo
 redo()
 assert.equal(useEditorStore.getState().garment.colors.body, '#222222')
 
+// 6. Lapisan: urutan array = urutan tumpukan, duplikat tepat di atas aslinya.
+useEditorStore.setState({ layers: [] })
+s.addText('front', 'A', 5)
+s.addText('front', 'B', 5)
+const names = () => useEditorStore.getState().layers.map((l) => (l.kind === 'text' ? l.text : ''))
+const a = useEditorStore.getState().layers[0]
+s.moveLayer(a.id, 1)
+assert.deepEqual(names(), ['B', 'A'])
+s.duplicateLayer(a.id)
+assert.deepEqual(names(), ['B', 'A', 'A'])
+
 console.log('check: OK')

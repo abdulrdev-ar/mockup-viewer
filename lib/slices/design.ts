@@ -1,12 +1,13 @@
 import type { Slice } from '../store.ts'
 
-export type Zone = 'front' | 'chestLeft' | 'back' | 'sleeveL' | 'sleeveR'
+/** Sisi kaos yang bisa dicetak. Satu sisi = satu halaman di kanvas desain. */
+export type Zone = 'front' | 'back' | 'sleeveL' | 'sleeveR'
 export type FontId = 'instrument' | 'anton' | 'bebas' | 'archivo' | 'playfair' | 'caveat' | 'pacifico' | 'oswald'
 
 type LayerBase = {
   id: string
   zone: Zone
-  /** posisi pusat dalam cm, relatif ke pusat zona (x ke kanan, y ke bawah) */
+  /** posisi pusat dalam cm, relatif ke pusat area cetak sisi (x ke kanan, y ke bawah) */
   x: number
   y: number
   /** derajat */
@@ -41,12 +42,16 @@ export type TextLayer = LayerBase & {
 export type Layer = ImageLayer | TextLayer
 
 export type DesignSlice = {
+  /** Urutan = urutan tumpukan: elemen terakhir tampil paling depan. */
   layers: Layer[]
   selectedId: string | null
   addImage: (zone: Zone, src: string, pxW: number, pxH: number, width: number) => void
-  addText: (zone: Zone) => void
+  addText: (zone: Zone, text: string, size: number) => void
   updateLayer: (id: string, patch: Partial<ImageLayer> | Partial<TextLayer>) => void
   removeLayer: (id: string) => void
+  duplicateLayer: (id: string) => void
+  /** Pindahkan ke posisi tumpukan `to` (0 = paling belakang). */
+  moveLayer: (id: string, to: number) => void
   selectLayer: (id: string | null) => void
 }
 
@@ -62,7 +67,7 @@ export const createDesignSlice: Slice<DesignSlice> = (set) => ({
       selectedId: id,
     }))
   },
-  addText: (zone) => {
+  addText: (zone, text, size) => {
     const id = newId()
     set((s) => ({
       layers: [
@@ -74,10 +79,10 @@ export const createDesignSlice: Slice<DesignSlice> = (set) => ({
           x: 0,
           y: 0,
           rotation: 0,
-          text: 'Tulisanmu',
+          text,
           font: 'anton',
           color: '#1C1C1E',
-          size: zone === 'chestLeft' || zone.startsWith('sleeve') ? 2 : 5,
+          size,
           align: 'center',
           letterSpacing: 0,
           lineHeight: 1.1,
@@ -95,5 +100,21 @@ export const createDesignSlice: Slice<DesignSlice> = (set) => ({
       layers: s.layers.filter((l) => l.id !== id),
       selectedId: s.selectedId === id ? null : s.selectedId,
     })),
+  duplicateLayer: (id) =>
+    set((s) => {
+      const i = s.layers.findIndex((l) => l.id === id)
+      if (i < 0) return {}
+      const copy = { ...s.layers[i], id: newId(), x: s.layers[i].x + 1, y: s.layers[i].y + 1 }
+      return { layers: [...s.layers.slice(0, i + 1), copy, ...s.layers.slice(i + 1)], selectedId: copy.id }
+    }),
+  moveLayer: (id, to) =>
+    set((s) => {
+      const from = s.layers.findIndex((l) => l.id === id)
+      if (from < 0) return {}
+      const layers = [...s.layers]
+      const [l] = layers.splice(from, 1)
+      layers.splice(Math.max(0, Math.min(layers.length, to)), 0, l)
+      return { layers }
+    }),
   selectLayer: (id) => set({ selectedId: id }),
 })

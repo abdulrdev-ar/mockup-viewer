@@ -7,29 +7,26 @@ export type CanvasId = 'body' | 'sleeveL' | 'sleeveR'
 /** Kerangka zona cetak: pusat (px), skala (px per cm), rotasi dasar (derajat), ukuran maksimum (cm). */
 export type ZoneFrame = { canvas: CanvasId; cx: number; cy: number; sx: number; sy: number; rot: number; w: number; h: number }
 
-export const ZONES: Zone[] = ['front', 'chestLeft', 'back', 'sleeveL', 'sleeveR']
+export const ZONES: Zone[] = ['front', 'back', 'sleeveL', 'sleeveR']
 export const ZONE_LABEL: Record<Zone, string> = {
-  front: 'Dada',
-  chestLeft: 'Dada kiri',
-  back: 'Punggung',
+  front: 'Depan',
+  back: 'Belakang',
   sleeveL: 'Lengan kiri',
   sleeveR: 'Lengan kanan',
 }
 
 const DEG = Math.PI / 180
+/** Area cetak badan: dari bawah kerah sampai di atas hem. */
+const HEM_GAP = 0.06
+const topOf = (d: Dims, zone: 'front' | 'back') => (zone === 'front' ? d.H - d.dropFront - 0.05 : d.H - d.dropBack - 0.08)
 
-/** Ukuran zona dalam cm untuk kaos dengan dimensi d. Lebar diukur pada tampak depan (proyeksi datar). */
+/** Tinggi titik tengah area cetak badan dari hem (meter). */
+export const zoneCenterY = (d: Dims, zone: 'front' | 'back') => (topOf(d, zone) + HEM_GAP) / 2
+
+/** Ukuran area cetak dalam cm. Lebar diukur pada tampak depan (proyeksi datar). */
 export function zoneSize(d: Dims, zone: Zone): { w: number; h: number } {
-  if (zone === 'front') {
-    const top = d.H - d.dropFront - 0.06
-    return { w: Math.min(30, d.chest * 200 * 0.8), h: Math.min(40, (top - 0.1) * 100) }
-  }
-  if (zone === 'back') {
-    const top = d.H - d.dropBack - 0.08
-    return { w: Math.min(32, d.chest * 200 * 0.85), h: Math.min(42, (top - 0.1) * 100) }
-  }
-  if (zone === 'chestLeft') return { w: 10, h: 10 }
-  return { w: 8, h: 8 }
+  if (zone === 'front' || zone === 'back') return { w: d.chest * 200 * 0.9, h: (topOf(d, zone) - HEM_GAP) * 100 }
+  return { w: 10, h: 10 }
 }
 
 export function zoneFrames(d: Dims, bodyW: number, sleeveSize: number): Record<Zone, ZoneFrame> {
@@ -54,18 +51,16 @@ export function zoneFrames(d: Dims, bodyW: number, sleeveSize: number): Record<Z
     front: {
       canvas: 'body',
       cx: frontX(0),
-      cy: rowY(d.H - d.dropFront - 0.06 - front.h / 200),
+      cy: rowY(zoneCenterY(d, 'front')),
       sx: ppc,
       sy: ppc,
       rot: 0,
       ...front,
     },
-    // Dada kiri pemakai = sisi kanan saat kaos dilihat dari depan (+x).
-    chestLeft: { canvas: 'body', cx: frontX(d.chest * 0.42), cy: rowY(d.H - 0.17), sx: ppc, sy: ppc, rot: 0, w: 10, h: 10 },
     back: {
       canvas: 'body',
       cx: backX(0),
-      cy: rowY(d.H - d.dropBack - 0.08 - back.h / 200),
+      cy: rowY(zoneCenterY(d, 'back')),
       sx: ppc,
       sy: ppc,
       rot: 0,
@@ -80,9 +75,9 @@ export const imageHeightCm = (l: ImageLayer) => (l.width * l.pxH) / l.pxW
 export const dpiOf = (l: ImageLayer) => l.pxW / (l.width / 2.54)
 export const DPI_WARNING = 150
 
-/** Lebar awal gambar baru: 80% dari zona, rasio terjaga. */
+/** Lebar awal gambar baru: setengah area cetak, rasio terjaga. */
 export const fitWidth = (pxW: number, pxH: number, z: { w: number; h: number }) =>
-  Math.min(z.w * 0.8, ((z.h * 0.8) * pxW) / pxH)
+  Math.min(z.w * 0.5, ((z.h * 0.5) * pxW) / pxH)
 
 /** Jaga gambar tetap di dalam zona. Teks hanya dijaga pusatnya. */
 export function clampToZone(l: Layer, z: { w: number; h: number }) {
@@ -100,6 +95,8 @@ export type PaintInput = {
   fonts: Record<FontId, string>
   images: Map<string, CanvasImageSource>
   guide: Zone | null
+  /** Hanya gambar lapisan di sisi ini (halaman kanvas desain). */
+  only?: Zone
 }
 
 const PART_OF: Record<CanvasId, keyof Garment['colors']> = { body: 'body', sleeveL: 'sleeveL', sleeveR: 'sleeveR' }
@@ -112,7 +109,7 @@ export function paintCanvas(id: CanvasId, ctx: CanvasRenderingContext2D, p: Pain
   ctx.fillRect(0, 0, width, height)
   for (const layer of p.layers) {
     const f = p.frames[layer.zone]
-    if (f.canvas !== id) continue
+    if (f.canvas !== id || (p.only && layer.zone !== p.only)) continue
     ctx.save()
     const k = enterFrame(ctx, f)
     ctx.translate(layer.x * k, layer.y * k)
@@ -137,6 +134,24 @@ export function paintCanvas(id: CanvasId, ctx: CanvasRenderingContext2D, p: Pain
     ctx.strokeRect((-g.w * k) / 2, (-g.h * k) / 2, g.w * k, g.h * k)
     ctx.restore()
   }
+}
+
+/** Lebar dan tinggi kotak lapisan dalam cm, sebelum diputar. Dipakai pegangan seleksi di kanvas desain. */
+export function layerBox(ctx: CanvasRenderingContext2D, l: Layer, family: string): { w: number; h: number } {
+  if (l.kind === 'image') return { w: l.width, h: imageHeightCm(l) }
+  const K = 20
+  const text = l.upper ? l.text.toUpperCase() : l.text
+  ctx.font = `${l.size * K}px ${family}`
+  const spacing = l.letterSpacing * l.size * K
+  const widthOf = (s: string) => ctx.measureText(s).width + spacing * [...s].length
+  if (l.arc === 0) {
+    const lines = text.split('\n')
+    return { w: Math.max(...lines.map(widthOf)) / K, h: lines.length * l.size * l.lineHeight }
+  }
+  const total = widthOf(text.replace(/\n/g, ' ')) / K
+  const a = Math.abs(l.arc) * DEG
+  const r = total / a
+  return { w: a < Math.PI ? 2 * r * Math.sin(a / 2) : 2 * r, h: l.size + r * (1 - Math.cos(Math.min(a, Math.PI) / 2)) }
 }
 
 /** Masuk ke ruang zona: satuan = cm x k px, rotasi di ruang fisik, lalu skala tak seragam ke kanvas. */

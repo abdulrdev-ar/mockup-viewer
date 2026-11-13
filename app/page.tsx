@@ -121,7 +121,7 @@ export default function Home() {
           <figure className={styles.heroMedia}>
             <Image
               src="/editor-preview.jpg"
-              alt="Editor Mockup Viewer: kaos 3D di tengah layar dengan panel pengaturan warna di sisi kanan."
+              alt="Editor Mockup Viewer: daftar lapisan di kiri, halaman desain sisi depan berisi gambar dan tulisan di tengah, dan pratinjau kaos 3D hijau di kanan."
               width={1440}
               height={900}
               priority
@@ -129,7 +129,7 @@ export default function Home() {
               className={styles.heroImage}
             />
             <figcaption className={styles.annotations}>
-              <span className="label">Zona dada: 30 x 40 cm</span>
+              <span className="label">Area cetak depan: 33 x 52 cm</span>
               <span className="label">Kerah bulat, lengan pendek, katun combed</span>
             </figcaption>
           </figure>

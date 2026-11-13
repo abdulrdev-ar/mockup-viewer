@@ -1,7 +1,9 @@
 import { create, type StateCreator } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
+import { MODELS } from './garment.ts'
 import { idbStorage } from './idb-storage.ts'
-import { createDesignSlice, type DesignSlice } from './slices/design.ts'
+import { zoneCenterY } from './print.ts'
+import { createDesignSlice, type DesignSlice, type Layer } from './slices/design.ts'
 import { createGarmentSlice, type GarmentSlice } from './slices/garment.ts'
 import { createHistorySlice, snapshot, type HistorySlice, type Snapshot } from './slices/history.ts'
 import { createSceneSlice, type SceneSlice } from './slices/scene.ts'
@@ -21,8 +23,19 @@ export const useEditorStore = create<EditorState>()(
     }),
     {
       name: 'mockup-viewer:project',
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => idbStorage),
+      // Versi 1 punya zona "Dada kiri". Sekarang dada kiri hanya posisi di sisi Depan.
+      migrate: (persisted, version) => {
+        const s = persisted as { layers?: (Omit<Layer, 'zone'> & { zone: string })[] }
+        if (version < 2 && s.layers) {
+          const d = MODELS.short.dims
+          s.layers = s.layers.map((l) =>
+            l.zone === 'chestLeft' ? { ...l, zone: 'front', x: l.x + d.chest * 42, y: l.y + (zoneCenterY(d, 'front') - (d.H - 0.17)) * 100 } : l,
+          )
+        }
+        return s as EditorState
+      },
       partialize: (s) => ({
         garment: s.garment,
         layers: s.layers,

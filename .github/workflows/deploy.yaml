@@ -1,0 +1,48 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  # Jalankan ulang deploy dari tab Actions tanpa commit kosong.
+  workflow_dispatch:
+
+# Dua deploy tidak boleh balapan ke Worker yang sama. Antre, jangan batalkan deploy yang sedang jalan.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # Versi pnpm diambil dari `packageManager` di package.json. Menulisnya di sini juga membuat job gagal.
+      - uses: pnpm/action-setup@v4
+
+      # Node 24: skrip pemeriksaan (`pnpm check`) menjalankan berkas .ts langsung.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # pnpm-lock.yaml ada di repo, jadi versi dependensi terkunci dan sama dengan lokal.
+      - run: pnpm install --frozen-lockfile
+
+      # Pemeriksaan gagal = deploy tidak jalan.
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm check
+
+      # Menulis situs statis ke out/.
+      - run: pnpm build
+
+      - run: pnpm exec wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

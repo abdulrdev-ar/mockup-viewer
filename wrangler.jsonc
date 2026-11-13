@@ -1,0 +1,13 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "mockup-viewer",
+  "compatibility_date": "2026-11-01",
+  // Hanya aset statis hasil `next build` (output: 'export'), tanpa kode Worker.
+  "assets": {
+    "directory": "./out",
+    // /editor -> editor.html
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page",
+  },
+  "observability": { "enabled": true },
+}

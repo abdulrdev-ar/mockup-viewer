@@ -7,3 +7,4 @@ next-env.d.ts
 
 # Model mentah dari Sketchfab (puluhan MB). Sumber dan cara mengolah: docs/09-aset.md
 assets/models/
+.wrangler

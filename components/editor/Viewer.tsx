@@ -7,12 +7,13 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { FABRIC, THICKNESS_NORMAL, fabricNormalTexture } from '@/lib/fabric'
 import { PRINT_FONT_FAMILIES } from '@/lib/fonts'
+import { loadedImages, onAssetsReady } from '@/lib/print-assets'
 import { MODELS, modelOf, printAttributes, type Dims, type ModelId, type ModelPart } from '@/lib/garment'
 import { paintCanvas, zoneFrames, type CanvasId } from '@/lib/print'
 import type { Garment } from '@/lib/slices/garment'
 import type { Scene } from '@/lib/slices/scene'
 import type { CameraPreset, Quality } from '@/lib/slices/ui'
-import { useEditorStore, type EditorState } from '@/lib/store'
+import { useEditorStore } from '@/lib/store'
 import { viewerApi } from '@/lib/viewer-api'
 import styles from './editor.module.css'
 
@@ -155,8 +156,8 @@ export default function Viewer() {
     let dirty = true
     let hideGuides = false
     let disposed = false
-    const images = new Map<string, HTMLImageElement>()
-    const fontState = new Map<string, 'loading' | 'ready'>()
+    const stopAssets = onAssetsReady(() => (dirty = true))
+    const imageError = () => store.getState().showToast('Gambar tidak bisa dibuka. Coba simpan ulang lalu unggah lagi.', 'error')
 
     // --- model kaos ---
     const loader = new GLTFLoader()
@@ -235,41 +236,16 @@ export default function Viewer() {
       dirty = true
     }
 
-    function ensureAssets(s: EditorState) {
-      for (const l of s.layers) {
-        if (l.kind === 'image' && !images.has(l.src)) {
-          const img = new Image()
-          img.onload = () => (dirty = true)
-          img.onerror = () => store.getState().showToast('Gambar tidak bisa dibuka. Coba simpan ulang lalu unggah lagi.', 'error')
-          img.src = l.src
-          images.set(l.src, img)
-        }
-        if (l.kind === 'text') {
-          const family = PRINT_FONT_FAMILIES[l.font]
-          if (!fontState.has(family)) {
-            fontState.set(family, 'loading')
-            document.fonts.load(`48px ${family}`).finally(() => {
-              fontState.set(family, 'ready')
-              dirty = true
-            })
-          }
-        }
-      }
-    }
-
     function repaint() {
       const s = store.getState()
-      ensureAssets(s)
       const frames = zoneFrames(dims, canvases.body.width, canvases.sleeveL.width)
       const selected = s.layers.find((l) => l.id === s.selectedId)
-      const loaded = new Map<string, CanvasImageSource>()
-      images.forEach((img, src) => img.complete && img.naturalWidth > 0 && loaded.set(src, img))
       const input = {
         garment: s.garment,
         layers: s.layers,
         frames,
         fonts: PRINT_FONT_FAMILIES,
-        images: loaded,
+        images: loadedImages(s.layers, imageError),
         guide: !hideGuides && s.showGuides && selected ? selected.zone : null,
       }
       for (const id of Object.keys(canvases) as CanvasId[]) {
@@ -504,6 +480,7 @@ export default function Viewer() {
 
     return () => {
       disposed = true
+      stopAssets()
       unsub()
       renderer.setAnimationLoop(null)
       ro.disconnect()
