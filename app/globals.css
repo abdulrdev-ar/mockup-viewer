@@ -1,0 +1,162 @@
+/* Token dari DESIGN.md (Aren). --ink-muted tambahan: teks sekunder, kontras 5,5:1 di neutral. */
+:root {
+  --primary: #0f60ff;
+  --secondary: #112a33;
+  --tertiary: #b2ccff;
+  --neutral: #e9e5e2;
+  --surface: #ffffff;
+  --on-surface: #112a33;
+  --error: #d64545;
+  --border: #e5e7eb;
+  --muted-accent: #d6e4ff;
+  --sky: #afc6ff;
+  --ink-muted: #4b5d63;
+
+  --r-sm: 4px;
+  --r-md: 8px;
+  --r-lg: 16px;
+  --r-full: 9999px;
+
+  --s-xs: 2px;
+  --s-sm: 12px;
+  --s-md: 20px;
+  --s-lg: 40px;
+  --s-xl: 120px;
+
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--neutral);
+  color: var(--on-surface);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.53;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 400;
+}
+
+a {
+  color: inherit;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.label {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+}
+
+/* Tombol: pill 40px (DESIGN.md), 44px untuk pointer sentuh (R-03). */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 4px 18px;
+  border-radius: var(--r-full);
+  border: 1px solid transparent;
+  font-size: 13px;
+  line-height: 1.46;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 160ms var(--ease),
+    color 160ms var(--ease),
+    border-color 160ms var(--ease);
+}
+
+@media (pointer: coarse) {
+  .btn {
+    min-height: 44px;
+  }
+}
+
+/* Teks #B2CCFF di #0F60FF = 3,1:1, dipertahankan atas keputusan pemilik (override R-25). */
+.btn-primary {
+  background: var(--primary);
+  color: var(--tertiary);
+}
+
+.btn-primary:hover {
+  background: var(--sky);
+  color: var(--secondary);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--secondary);
+  border-color: var(--secondary);
+}
+
+.btn-secondary:hover {
+  background: var(--muted-accent);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}
