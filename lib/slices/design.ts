@@ -1,13 +1,10 @@
 import type { Slice } from '../store.ts'
 
-/** Sisi kaos yang bisa dicetak. Satu sisi = satu halaman di kanvas desain. */
-export type Zone = 'front' | 'back' | 'sleeveL' | 'sleeveR'
 export type FontId = 'instrument' | 'anton' | 'bebas' | 'archivo' | 'playfair' | 'caveat' | 'pacifico' | 'oswald'
 
 type LayerBase = {
   id: string
-  zone: Zone
-  /** posisi pusat dalam cm, relatif ke pusat area cetak sisi (x ke kanan, y ke bawah) */
+  /** posisi pusat dalam cm di kanvas bungkus: x keliling badan dari tengah depan (ke kanan pengamat), y dari tengah kanvas ke bawah */
   x: number
   y: number
   /** derajat */
@@ -45,8 +42,8 @@ export type DesignSlice = {
   /** Urutan = urutan tumpukan: elemen terakhir tampil paling depan. */
   layers: Layer[]
   selectedId: string | null
-  addImage: (zone: Zone, src: string, pxW: number, pxH: number, width: number) => void
-  addText: (zone: Zone, text: string, size: number) => void
+  addImage: (at: { x: number; y: number }, src: string, pxW: number, pxH: number, width: number) => void
+  addText: (at: { x: number; y: number }, text: string, size: number) => void
   updateLayer: (id: string, patch: Partial<ImageLayer> | Partial<TextLayer>) => void
   removeLayer: (id: string) => void
   duplicateLayer: (id: string) => void
@@ -60,14 +57,14 @@ const newId = () => Math.random().toString(36).slice(2, 10)
 export const createDesignSlice: Slice<DesignSlice> = (set) => ({
   layers: [],
   selectedId: null,
-  addImage: (zone, src, pxW, pxH, width) => {
+  addImage: (at, src, pxW, pxH, width) => {
     const id = newId()
     set((s) => ({
-      layers: [...s.layers, { id, kind: 'image', zone, x: 0, y: 0, rotation: 0, src, pxW, pxH, width }],
+      layers: [...s.layers, { id, kind: 'image', ...at, rotation: 0, src, pxW, pxH, width }],
       selectedId: id,
     }))
   },
-  addText: (zone, text, size) => {
+  addText: (at, text, size) => {
     const id = newId()
     set((s) => ({
       layers: [
@@ -75,9 +72,7 @@ export const createDesignSlice: Slice<DesignSlice> = (set) => ({
         {
           id,
           kind: 'text',
-          zone,
-          x: 0,
-          y: 0,
+          ...at,
           rotation: 0,
           text,
           font: 'anton',

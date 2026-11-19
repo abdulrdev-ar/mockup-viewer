@@ -2,14 +2,10 @@
 
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
-import { garmentDims } from '@/lib/garment'
 import { saveEvents, type SaveStatus } from '@/lib/idb-storage'
-import { ZONE_LABEL, ZONES, clampToZone, zoneSize } from '@/lib/print'
-import type { Layer, Zone } from '@/lib/slices/design'
+import { placeLayer } from '@/lib/print'
 import type { CameraPreset, PanelId } from '@/lib/slices/ui'
 import { redo, undo, useEditorStore } from '@/lib/store'
-import { Segmented } from './controls'
-import DesignCanvas from './DesignCanvas'
 import { ContextToolbar, LayersPanel, TextPanel, UploadPanel, addImageFile } from './DesignPanel'
 import { ColorPanel, ExportPanel, MaterialPanel, ScenePanel, ShapePanel } from './panels'
 import Viewer from './Viewer'
@@ -19,7 +15,6 @@ import styles from './editor.module.css'
 const PANELS: { id: PanelId; label: string; render: () => React.ReactNode }[] = [
   { id: 'upload', label: 'Unggah', render: () => <UploadPanel /> },
   { id: 'text', label: 'Teks', render: () => <TextPanel /> },
-  { id: 'layers', label: 'Lapisan', render: () => <LayersPanel /> },
   { id: 'color', label: 'Warna', render: () => <ColorPanel /> },
   { id: 'material', label: 'Bahan', render: () => <MaterialPanel /> },
   { id: 'shape', label: 'Lengan', render: () => <ShapePanel /> },
@@ -37,10 +32,6 @@ const CAMERAS: { id: CameraPreset; label: string }[] = [
   { id: 'sleeve', label: 'Lengan' },
 ]
 
-// Pratinjau 3D ikut menghadap sisi yang sedang diedit. Lengan kiri pemakai ada di +x, dilihat kamera "right".
-const SURFACE_CAMERA: Record<Zone, CameraPreset> = { front: 'front', back: 'back', sleeveL: 'right', sleeveR: 'left' }
-const SURFACE_OPTIONS = ZONES.map((z) => ({ value: z, label: ZONE_LABEL[z] }))
-
 const MATERIAL_LABEL = { combed: 'katun combed', carded: 'katun carded', dryfit: 'polyester dry-fit', pique: 'pique' }
 const STATUS: Record<SaveStatus, string> = { saving: 'Menyimpan', saved: 'Tersimpan di browser ini', error: 'Gagal menyimpan' }
 const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }
@@ -51,7 +42,6 @@ const typing = (t: EventTarget | null) =>
 export default function Editor() {
   const hydrated = useEditorStore((s) => s.hydrated)
   const panel = useEditorStore((s) => s.panel)
-  const surface = useEditorStore((s) => s.surface)
   const webglError = useEditorStore((s) => s.webglError)
   const toast = useEditorStore((s) => s.toast)
   const canUndo = useEditorStore((s) => s.past.length > 0)
@@ -60,15 +50,15 @@ export default function Editor() {
   const layerCount = useEditorStore((s) => s.layers.length)
   const transparent = useEditorStore((s) => s.scene.background.type === 'transparent')
   const setPanel = useEditorStore((s) => s.setPanel)
-  const setSurface = useEditorStore((s) => s.setSurface)
   const requestCamera = useEditorStore((s) => s.requestCamera)
   const showToast = useEditorStore((s) => s.showToast)
   const [status, setStatus] = useState<SaveStatus | null>(null)
   const [hiddenToast, setHiddenToast] = useState<number | null>(null)
   const [fullscreen, setFullscreen] = useState(false)
-  // Layar sempit: kanvas desain dan pratinjau 3D bergantian. Layar lebar menampilkan keduanya.
-  const [view, setView] = useState<'design' | 'preview'>('design')
+  const [layersOpen, setLayersOpen] = useState(false)
+  const [dropping, setDropping] = useState(false)
   const previewRef = useRef<HTMLElement>(null)
+  const layersButton = useRef<HTMLButtonElement>(null)
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
 
   useEffect(() => {
@@ -112,12 +102,11 @@ export default function Editor() {
         e.preventDefault()
         s.removeLayer(sel.id)
       } else if (e.key === 'Escape' && sel) s.selectLayer(null)
-      else if (ARROWS[e.key] && sel) {
+      else if (ARROWS[e.key] && sel && !e.altKey) {
         // Geser halus 1 mm, atau 1 cm dengan Shift.
         e.preventDefault()
         const step = e.shiftKey ? 1 : 0.1
-        const next = { ...sel, x: sel.x + ARROWS[e.key][0] * step, y: sel.y + ARROWS[e.key][1] * step } as Layer
-        s.updateLayer(sel.id, clampToZone(next, zoneSize(garmentDims(s.garment), sel.zone)))
+        s.updateLayer(sel.id, placeLayer(sel.x + ARROWS[e.key][0] * step, sel.y + ARROWS[e.key][1] * step))
       }
     }
     const onPaste = (e: ClipboardEvent) => {
@@ -144,11 +133,9 @@ export default function Editor() {
     else previewRef.current?.requestFullscreen().catch(() => showToast('Layar penuh tidak tersedia di browser ini.', 'error'))
   }
 
-  function chooseSurface(z: Zone) {
-    const s = useEditorStore.getState()
-    if (s.layers.find((l) => l.id === s.selectedId)?.zone !== z) s.selectLayer(null)
-    setSurface(z)
-    requestCamera(SURFACE_CAMERA[z])
+  function closeLayers() {
+    setLayersOpen(false)
+    layersButton.current?.focus()
   }
 
   function onTabKey(e: React.KeyboardEvent, i: number) {
@@ -212,34 +199,26 @@ export default function Editor() {
           {active.render()}
         </aside>
 
-        <div className={styles.viewToggle}>
-          <Segmented
-            label="Tampilan"
-            value={view}
-            options={[
-              { value: 'design', label: 'Desain' },
-              { value: 'preview', label: 'Pratinjau 3D' },
-            ]}
-            onChange={setView}
-          />
-        </div>
-
-        <section className={styles.workspace} data-hidden={view !== 'design'} aria-label="Kanvas desain">
-          <div className={styles.surfaceBar}>
-            <Segmented label="Sisi kaos yang diedit" value={surface} options={SURFACE_OPTIONS} onChange={chooseSurface} />
-          </div>
-          <ContextToolbar />
-          {hydrated ? (
-            <DesignCanvas />
-          ) : (
-            <output className={styles.stageMessage}>
-              <p>Memulihkan proyek terakhirmu</p>
-            </output>
-          )}
-        </section>
-
-        <section ref={previewRef} className={styles.preview} data-hidden={view !== 'preview'} aria-label="Pratinjau 3D">
-          <div className={`${styles.stage} ${transparent ? styles.stageTransparent : ''}`}>
+        {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- area lepas berkas, juga bisa lewat panel Unggah */}
+        <section
+          ref={previewRef}
+          className={styles.preview}
+          aria-label="Pratinjau 3D"
+          onDragOver={(e) => {
+            if (![...e.dataTransfer.types].includes('Files')) return
+            e.preventDefault()
+            setDropping(true)
+          }}
+          onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && setDropping(false)}
+          onDrop={(e) => {
+            const file = [...e.dataTransfer.files].find((f) => f.type.startsWith('image/'))
+            setDropping(false)
+            if (!file) return
+            e.preventDefault()
+            void addImageFile(file, e.clientX, e.clientY)
+          }}
+        >
+          <div className={`${styles.stage} ${transparent ? styles.stageTransparent : ''} ${dropping ? styles.stageDrop : ''}`}>
             {webglError ? (
               <div className={styles.stageMessage} role="alert">
                 <p>
@@ -249,10 +228,28 @@ export default function Editor() {
               </div>
             ) : hydrated ? (
               <Viewer />
-            ) : null}
+            ) : (
+              <output className={styles.stageMessage}>
+                <p>Memulihkan proyek terakhirmu</p>
+              </output>
+            )}
             <p id="garment-description" className="sr-only">
               {description}
             </p>
+          </div>
+          <div className={styles.previewBar}>
+            <ContextToolbar />
+            <button
+              ref={layersButton}
+              type="button"
+              className={`btn btn-secondary ${styles.layersToggle}`}
+              aria-expanded={layersOpen}
+              aria-controls="layers-panel"
+              onClick={() => setLayersOpen((o) => !o)}
+            >
+              Lapisan ({layerCount})
+            </button>
+            {layersOpen && <LayersPanel onClose={closeLayers} />}
           </div>
           <div className={styles.cameraBar} role="toolbar" aria-label="Sudut kamera">
             {CAMERAS.map((c) => (

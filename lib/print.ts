@@ -1,143 +1,118 @@
-import { BODY_H, BODY_HALF_W, SLEEVE_SPAN, type Dims } from './garment.ts'
-import type { FontId, ImageLayer, Layer, TextLayer, Zone } from './slices/design.ts'
-import type { Garment } from './slices/garment.ts'
-
-export type CanvasId = 'body' | 'sleeveL' | 'sleeveR'
-
-/** Kerangka zona cetak: pusat (px), skala (px per cm), rotasi dasar (derajat), ukuran maksimum (cm). */
-export type ZoneFrame = { canvas: CanvasId; cx: number; cy: number; sx: number; sy: number; rot: number; w: number; h: number }
-
-export const ZONES: Zone[] = ['front', 'back', 'sleeveL', 'sleeveR']
-export const ZONE_LABEL: Record<Zone, string> = {
-  front: 'Depan',
-  back: 'Belakang',
-  sleeveL: 'Lengan kiri',
-  sleeveR: 'Lengan kanan',
-}
+import { WRAP_H, WRAP_W } from './garment.ts'
+import type { FontId, ImageLayer, Layer, TextLayer } from './slices/design.ts'
 
 const DEG = Math.PI / 180
-/** Area cetak badan: dari bawah kerah sampai di atas hem. */
-const HEM_GAP = 0.06
-const topOf = (d: Dims, zone: 'front' | 'back') => (zone === 'front' ? d.H - d.dropFront - 0.05 : d.H - d.dropBack - 0.08)
-
-/** Tinggi titik tengah area cetak badan dari hem (meter). */
-export const zoneCenterY = (d: Dims, zone: 'front' | 'back') => (topOf(d, zone) + HEM_GAP) / 2
-
-/** Ukuran area cetak dalam cm. Lebar diukur pada tampak depan (proyeksi datar). */
-export function zoneSize(d: Dims, zone: Zone): { w: number; h: number } {
-  if (zone === 'front' || zone === 'back') return { w: d.chest * 200 * 0.9, h: (topOf(d, zone) - HEM_GAP) * 100 }
-  return { w: 10, h: 10 }
-}
-
-export function zoneFrames(d: Dims, bodyW: number, sleeveSize: number): Record<Zone, ZoneFrame> {
-  const bodyH = bodyW / 2
-  const ppc = bodyH / BODY_H / 100
-  const frontX = (x: number) => (x + BODY_HALF_W) * ppc * 100
-  const backX = (x: number) => bodyW / 2 + (-x + BODY_HALF_W) * ppc * 100
-  const rowY = (y: number) => bodyH - y * ppc * 100
-  const front = zoneSize(d, 'front')
-  const back = zoneSize(d, 'back')
-  // Kanvas lengan berpusat di titik cetak lengan (lihat printAttributes), tegak seperti dilihat dari samping.
-  const sleeve = (canvas: CanvasId): ZoneFrame => ({
-    canvas,
-    cx: sleeveSize / 2,
-    cy: sleeveSize / 2,
-    sx: sleeveSize / (SLEEVE_SPAN * 100),
-    sy: sleeveSize / (SLEEVE_SPAN * 100),
-    rot: 0,
-    ...zoneSize(d, 'sleeveL'),
-  })
-  return {
-    front: {
-      canvas: 'body',
-      cx: frontX(0),
-      cy: rowY(zoneCenterY(d, 'front')),
-      sx: ppc,
-      sy: ppc,
-      rot: 0,
-      ...front,
-    },
-    back: {
-      canvas: 'body',
-      cx: backX(0),
-      cy: rowY(zoneCenterY(d, 'back')),
-      sx: ppc,
-      sy: ppc,
-      rot: 0,
-      ...back,
-    },
-    sleeveL: sleeve('sleeveL'),
-    sleeveR: sleeve('sleeveR'),
-  }
-}
+type Box = { w: number; h: number }
+type Point = { x: number; y: number }
 
 export const imageHeightCm = (l: ImageLayer) => (l.width * l.pxH) / l.pxW
 export const dpiOf = (l: ImageLayer) => l.pxW / (l.width / 2.54)
 export const DPI_WARNING = 150
 
-/** Lebar awal gambar baru: setengah area cetak, rasio terjaga. */
-export const fitWidth = (pxW: number, pxH: number, z: { w: number; h: number }) =>
-  Math.min(z.w * 0.5, ((z.h * 0.5) * pxW) / pxH)
+/** Lebar awal gambar baru: muat dalam 16 x 25 cm, rasio terjaga. */
+export const fitWidth = (pxW: number, pxH: number) => Math.min(16, (25 * pxW) / pxH)
 
-/** Jaga gambar tetap di dalam zona. Teks hanya dijaga pusatnya. */
-export function clampToZone(l: Layer, z: { w: number; h: number }) {
-  const hw = l.kind === 'image' ? l.width / 2 : 0
-  const hh = l.kind === 'image' ? imageHeightCm(l) / 2 : 0
-  const mx = Math.max(0, z.w / 2 - hw)
-  const my = Math.max(0, z.h / 2 - hh)
-  return { x: Math.min(mx, Math.max(-mx, l.x)), y: Math.min(my, Math.max(-my, l.y)) }
+/** Selisih x terpendek di kanvas yang melingkari badan. */
+export const wrapDx = (dx: number) => dx - WRAP_W * Math.round(dx / WRAP_W)
+
+/** x berputar keliling badan, pusat y tetap di dalam kanvas. */
+export const placeLayer = (x: number, y: number): Point => ({ x: wrapDx(x), y: Math.min(WRAP_H / 2, Math.max(-WRAP_H / 2, y)) })
+
+/** Titik pegangan seleksi dalam ruang lokal lapisan (cm): empat sudut, lalu pegangan putar di atas. */
+export const handlePoints = (b: Box, r: number) => [
+  [-b.w / 2, -b.h / 2],
+  [b.w / 2, -b.h / 2],
+  [b.w / 2, b.h / 2],
+  [-b.w / 2, b.h / 2],
+  [0, -b.h / 2 - r * 4],
+]
+
+/** Titik p (cm kanvas) dalam ruang lokal lapisan: digeser keliling badan, lalu putarannya dibalik. */
+function toLocal(l: Layer, p: Point): Point {
+  const dx = wrapDx(p.x - l.x)
+  const dy = p.y - l.y
+  const a = -l.rotation * DEG
+  return { x: dx * Math.cos(a) - dy * Math.sin(a), y: dx * Math.sin(a) + dy * Math.cos(a) }
+}
+
+/** Lapisan teratas di titik p. */
+export const hitLayer = (layers: Layer[], boxOf: (l: Layer) => Box, p: Point) =>
+  layers.findLast((l) => {
+    const q = toLocal(l, p)
+    const b = boxOf(l)
+    return Math.abs(q.x) <= b.w / 2 && Math.abs(q.y) <= b.h / 2
+  })
+
+/** Indeks pegangan seleksi di titik p (0-3 sudut, 4 putar), atau -1. */
+export function hitHandle(l: Layer, b: Box, r: number, p: Point, reach: number) {
+  const q = toLocal(l, p)
+  return handlePoints(b, r).findIndex(([hx, hy]) => Math.hypot(q.x - hx, q.y - hy) <= r * reach)
 }
 
 export type PaintInput = {
-  garment: Garment
   layers: Layer[]
-  frames: Record<Zone, ZoneFrame>
   fonts: Record<FontId, string>
   images: Map<string, CanvasImageSource>
-  guide: Zone | null
-  /** Hanya gambar lapisan di sisi ini (halaman kanvas desain). */
-  only?: Zone
+  /** Lapisan terpilih dan jari-jari pegangan (cm), atau null saat ekspor. */
+  selection: { id: string; r: number } | null
 }
 
-const PART_OF: Record<CanvasId, keyof Garment['colors']> = { body: 'body', sleeveL: 'sleeveL', sleeveR: 'sleeveR' }
-
-/** Gambar satu kanvas cetak: warna kain, lalu lapisan gambar dan teks di zonanya. */
-export function paintCanvas(id: CanvasId, ctx: CanvasRenderingContext2D, p: PaintInput) {
+/** Gambar semua lapisan ke kanvas cetak transparan. Warna kain diatur material di Viewer. */
+export function paintWrap(ctx: CanvasRenderingContext2D, p: PaintInput) {
   const { width, height } = ctx.canvas
+  const k = width / WRAP_W
   ctx.setTransform(1, 0, 0, 1, 0, 0)
-  ctx.fillStyle = p.garment.colors[PART_OF[id]]
-  ctx.fillRect(0, 0, width, height)
-  for (const layer of p.layers) {
-    const f = p.frames[layer.zone]
-    if (f.canvas !== id || (p.only && layer.zone !== p.only)) continue
-    ctx.save()
-    const k = enterFrame(ctx, f)
-    ctx.translate(layer.x * k, layer.y * k)
-    ctx.rotate(layer.rotation * DEG)
-    if (layer.kind === 'image') {
-      const img = p.images.get(layer.src)
-      if (img) {
-        const w = layer.width * k
-        const h = imageHeightCm(layer) * k
-        ctx.drawImage(img, -w / 2, -h / 2, w, h)
-      }
-    } else drawText(ctx, layer, k, p.fonts[layer.font])
-    ctx.restore()
-  }
-  const g = p.guide && p.frames[p.guide]
-  if (g && g.canvas === id) {
-    ctx.save()
-    const k = enterFrame(ctx, g)
-    ctx.setLineDash([k * 0.8, k * 0.6])
-    ctx.lineWidth = k * 0.15
-    ctx.strokeStyle = 'rgba(15, 96, 255, 0.85)'
-    ctx.strokeRect((-g.w * k) / 2, (-g.h * k) / 2, g.w * k, g.h * k)
-    ctx.restore()
+  ctx.clearRect(0, 0, width, height)
+  for (const l of p.layers) {
+    const b = layerBox(ctx, l, p.fonts[l.kind === 'text' ? l.font : 'anton'])
+    const sel = p.selection?.id === l.id ? p.selection.r : 0
+    // Lapisan dekat tengah belakang digambar juga di sisi kanvas seberangnya supaya menyambung.
+    const reach = Math.hypot(b.w, b.h) / 2 + sel * 5
+    for (const off of [0, -WRAP_W, WRAP_W]) {
+      const x = l.x + off
+      if (off !== 0 && Math.abs(x) - reach > WRAP_W / 2) continue
+      ctx.save()
+      ctx.translate(width / 2 + x * k, height / 2 + l.y * k)
+      ctx.rotate(l.rotation * DEG)
+      if (l.kind === 'image') {
+        const img = p.images.get(l.src)
+        if (img) ctx.drawImage(img, (-b.w * k) / 2, (-b.h * k) / 2, b.w * k, b.h * k)
+      } else drawText(ctx, l, k, p.fonts[l.font])
+      if (sel) drawSelection(ctx, b, sel, k)
+      ctx.restore()
+    }
   }
 }
 
-/** Lebar dan tinggi kotak lapisan dalam cm, sebelum diputar. Dipakai pegangan seleksi di kanvas desain. */
-export function layerBox(ctx: CanvasRenderingContext2D, l: Layer, family: string): { w: number; h: number } {
+/** Kotak seleksi dan pegangan. Garis putih di bawah biru supaya terlihat di kain gelap maupun terang. */
+function drawSelection(ctx: CanvasRenderingContext2D, b: Box, r: number, k: number) {
+  const pts = handlePoints(b, r)
+  for (const [color, width] of [
+    ['#FFFFFF', r * 0.45],
+    ['#0F60FF', r * 0.22],
+  ] as const) {
+    ctx.strokeStyle = color
+    ctx.lineWidth = width * k
+    ctx.strokeRect((-b.w * k) / 2, (-b.h * k) / 2, b.w * k, b.h * k)
+    ctx.beginPath()
+    ctx.moveTo(0, (-b.h * k) / 2)
+    ctx.lineTo(0, pts[4][1] * k)
+    ctx.stroke()
+  }
+  ctx.fillStyle = '#FFFFFF'
+  ctx.strokeStyle = '#0F60FF'
+  ctx.lineWidth = r * 0.3 * k
+  for (const [i, [hx, hy]] of pts.entries()) {
+    ctx.beginPath()
+    if (i === 4) ctx.arc(hx * k, hy * k, r * k, 0, Math.PI * 2)
+    else ctx.rect((hx - r * 0.6) * k, (hy - r * 0.6) * k, r * 1.2 * k, r * 1.2 * k)
+    ctx.fill()
+    ctx.stroke()
+  }
+}
+
+/** Lebar dan tinggi kotak lapisan dalam cm, sebelum diputar. */
+export function layerBox(ctx: CanvasRenderingContext2D, l: Layer, family: string): Box {
   if (l.kind === 'image') return { w: l.width, h: imageHeightCm(l) }
   const K = 20
   const text = l.upper ? l.text.toUpperCase() : l.text
@@ -154,15 +129,6 @@ export function layerBox(ctx: CanvasRenderingContext2D, l: Layer, family: string
   return { w: a < Math.PI ? 2 * r * Math.sin(a / 2) : 2 * r, h: l.size + r * (1 - Math.cos(Math.min(a, Math.PI) / 2)) }
 }
 
-/** Masuk ke ruang zona: satuan = cm x k px, rotasi di ruang fisik, lalu skala tak seragam ke kanvas. */
-function enterFrame(ctx: CanvasRenderingContext2D, f: ZoneFrame) {
-  const k = Math.max(f.sx, f.sy)
-  ctx.translate(f.cx, f.cy)
-  ctx.scale(f.sx / k, f.sy / k)
-  ctx.rotate(f.rot * DEG)
-  return k
-}
-
 function drawText(ctx: CanvasRenderingContext2D, t: TextLayer, k: number, family: string) {
   const px = t.size * k
   const text = t.upper ? t.text.toUpperCase() : t.text
@@ -176,7 +142,7 @@ function drawText(ctx: CanvasRenderingContext2D, t: TextLayer, k: number, family
   const maxW = Math.max(...lines.map((l) => ctx.measureText(l).width))
   ctx.textAlign = t.align
   const x = t.align === 'left' ? -maxW / 2 : t.align === 'right' ? maxW / 2 : 0
-  lines.forEach((l, i) => ctx.fillText(l, x, ((i - (lines.length - 1) / 2) * lh)))
+  lines.forEach((l, i) => ctx.fillText(l, x, (i - (lines.length - 1) / 2) * lh))
 }
 
 /** Teks melengkung. arc > 0 melengkung ke atas, arc < 0 ke bawah. */

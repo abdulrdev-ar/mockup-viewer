@@ -207,11 +207,9 @@ export function ShapePanel() {
 export function ScenePanel() {
   const sc = useEditorStore((s) => s.scene)
   const quality = useEditorStore((s) => s.quality)
-  const showGuides = useEditorStore((s) => s.showGuides)
   const setScene = useEditorStore((s) => s.setScene)
   const setBackground = useEditorStore((s) => s.setBackground)
   const setQuality = useEditorStore((s) => s.setQuality)
-  const setShowGuides = useEditorStore((s) => s.setShowGuides)
   const showToast = useEditorStore((s) => s.showToast)
   const bg = sc.background
   return (
@@ -276,10 +274,6 @@ export function ScenePanel() {
           ]}
           onChange={setQuality}
         />
-        <label className={styles.check}>
-          <input type="checkbox" checked={showGuides} onChange={(e) => setShowGuides(e.target.checked)} />
-          Tampilkan garis zona cetak saat desain dipilih
-        </label>
       </Section>
     </>
   )

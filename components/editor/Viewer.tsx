@@ -8,16 +8,18 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { FABRIC, THICKNESS_NORMAL, fabricNormalTexture } from '@/lib/fabric'
 import { PRINT_FONT_FAMILIES } from '@/lib/fonts'
 import { loadedImages, onAssetsReady } from '@/lib/print-assets'
-import { MODELS, modelOf, printAttributes, type Dims, type ModelId, type ModelPart } from '@/lib/garment'
-import { paintCanvas, zoneFrames, type CanvasId } from '@/lib/print'
+import { MODELS, WRAP_H, WRAP_W, bodySections, modelOf, wrapUv, type Dims, type ModelId, type ModelPart } from '@/lib/garment'
+import { hitHandle, hitLayer, layerBox, paintWrap, placeLayer, wrapDx } from '@/lib/print'
+import type { Layer } from '@/lib/slices/design'
 import type { Garment } from '@/lib/slices/garment'
 import type { Scene } from '@/lib/slices/scene'
 import type { CameraPreset, Quality } from '@/lib/slices/ui'
-import { useEditorStore } from '@/lib/store'
+import { holdHistory, useEditorStore } from '@/lib/store'
 import { viewerApi } from '@/lib/viewer-api'
 import styles from './editor.module.css'
 
 const PARTS: ModelPart[] = ['body', 'sleeveL', 'sleeveR', 'collar']
+const DEG = Math.PI / 180
 
 const LIGHTS = {
   neutral: { env: 0.7, key: 1.4, color: 0xffffff, rim: 0, pos: [-0.9, 3, 1.6] },
@@ -25,15 +27,19 @@ const LIGHTS = {
   contrast: { env: 0.25, key: 2.8, color: 0xffffff, rim: 1.2, pos: [-2.2, 1.6, 1.2] },
 } as const
 
-const QUALITY: Record<Quality, { ratio: number; body: number; sleeve: number; shadows: boolean }> = {
-  high: { ratio: 2, body: 4096, sleeve: 1024, shadows: true },
-  medium: { ratio: 1.25, body: 2048, sleeve: 512, shadows: true },
-  low: { ratio: 1, body: 2048, sleeve: 512, shadows: false },
+/** wrap = lebar kanvas cetak (px). Tingginya mengikuti rasio WRAP_H / WRAP_W. */
+const QUALITY: Record<Quality, { ratio: number; wrap: number; shadows: boolean }> = {
+  high: { ratio: 2, wrap: 4096, shadows: true },
+  medium: { ratio: 1.25, wrap: 2048, shadows: true },
+  low: { ratio: 1, wrap: 2048, shadows: false },
 }
 const QUALITY_DOWN: Record<Quality, Quality> = { high: 'medium', medium: 'low', low: 'low' }
+const CURSOR = ['nwse-resize', 'nesw-resize', 'nwse-resize', 'nesw-resize', 'grab']
 
 const WHITE = new THREE.Color(0xffffff)
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2)
+
+type Drag = { id: string; pointerId: number; mode: 'move' | 'resize' | 'rotate'; start: { x: number; y: number }; layer: Layer; dist: number }
 
 export default function Viewer() {
   const hostRef = useRef<HTMLDivElement>(null)
@@ -58,7 +64,10 @@ export default function Viewer() {
     renderer.shadowMap.type = THREE.PCFShadowMap
     const canvas = renderer.domElement
     canvas.setAttribute('role', 'img')
-    canvas.setAttribute('aria-label', 'Pratinjau 3D kaos. Seret untuk memutar, gulir atau cubit untuk memperbesar.')
+    canvas.setAttribute(
+      'aria-label',
+      'Pratinjau 3D kaos. Seret gambar atau tulisan untuk memindahkannya, seret kain atau latar untuk memutar, gulir atau cubit untuk memperbesar.',
+    )
     canvas.setAttribute('aria-describedby', 'garment-description')
     canvas.className = styles.canvas
     host.appendChild(canvas)
@@ -96,51 +105,35 @@ export default function Viewer() {
     ground.receiveShadow = true
     scene.add(ground)
 
-    // Kanvas cetak: warna kain + gambar + teks, dipakai sebagai tekstur.
-    const canvases: Record<CanvasId, HTMLCanvasElement> = {
-      body: document.createElement('canvas'),
-      sleeveL: document.createElement('canvas'),
-      sleeveR: document.createElement('canvas'),
-    }
-    const textures = {} as Record<CanvasId, THREE.CanvasTexture>
-    const makeTexture = (id: CanvasId) => {
-      textures[id]?.dispose()
-      const t = new THREE.CanvasTexture(canvases[id])
-      t.colorSpace = THREE.SRGBColorSpace
-      t.anisotropy = aniso
-      textures[id] = t
-      return t
+    // Satu kanvas cetak transparan untuk seluruh kaos. Diulang di u karena tengah belakang ada di u = 0 dan 1 (wrapUv).
+    const printCanvas = document.createElement('canvas')
+    let texture: THREE.CanvasTexture | null = null
+    const makeTexture = () => {
+      texture?.dispose()
+      texture = new THREE.CanvasTexture(printCanvas)
+      texture.colorSpace = THREE.SRGBColorSpace
+      texture.wrapS = THREE.RepeatWrapping
+      texture.anisotropy = aniso
+      // Alfa dikalikan saat unggah supaya tepi cetakan tidak bergaris gelap saat difilter.
+      texture.premultiplyAlpha = true
+      return texture
     }
 
     // Model hanya berisi permukaan luar kain. Sisi belakangnya adalah bagian dalam kaos (terlihat dari leher
-    // dan ujung lengan): digelapkan dan tanpa cetakan. Peta cetak juga hanya tampil di titik bermasker 1
-    // (printAttributes); di luar itu dipakai warna kain dari pojok kanvas, yang selalu polos (paintCanvas).
-    const INSIDE = 'diffuseColor.rgb *= gl_FrontFacing ? 1.0 : 0.62;'
-    const material = (print: boolean) => {
+    // dan ujung lengan): digelapkan dan tanpa cetakan. Warna kain dari material, cetakan dicampur di atasnya.
+    const material = () => {
       const m = new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide })
-      // Dua varian shader dari fungsi yang sama: kunci cache harus berbeda supaya program tidak tertukar.
-      m.customProgramCacheKey = () => (print ? 'kain-cetak' : 'kain')
       m.onBeforeCompile = (s) => {
-        if (!print) {
-          s.fragmentShader = s.fragmentShader.replace('#include <map_fragment>', INSIDE)
-          return
-        }
-        s.vertexShader = s.vertexShader
-          .replace('#include <common>', '#include <common>\nattribute float printMask;\nvarying float vPrintMask;')
-          .replace('#include <uv_vertex>', '#include <uv_vertex>\nvPrintMask = printMask;')
-        s.fragmentShader = s.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vPrintMask;').replace(
+        s.fragmentShader = s.fragmentShader.replace(
           '#include <map_fragment>',
-          `diffuseColor *= mix(texture2D(map, vec2(0.001)), texture2D(map, vMapUv), gl_FrontFacing ? vPrintMask : 0.0);\n${INSIDE}`,
+          `vec4 printTex = gl_FrontFacing ? texture2D(map, vMapUv) : vec4(0.0);
+diffuseColor.rgb = diffuseColor.rgb * (1.0 - printTex.a) + printTex.rgb;
+diffuseColor.rgb *= gl_FrontFacing ? 1.0 : 0.62;`,
         )
       }
       return m
     }
-    const outer: Record<ModelPart, THREE.MeshPhysicalMaterial> = {
-      body: material(true),
-      sleeveL: material(true),
-      sleeveR: material(true),
-      collar: material(false),
-    }
+    const outer = { body: material(), sleeveL: material(), sleeveR: material(), collar: material() } satisfies Record<ModelPart, THREE.MeshPhysicalMaterial>
     const group = new THREE.Group()
     const mesh = (p: ModelPart) => {
       const m = new THREE.Mesh(new THREE.BufferGeometry(), outer[p])
@@ -153,8 +146,11 @@ export default function Viewer() {
 
     let model: ModelId = modelOf(store.getState().garment)
     let dims: Dims = MODELS[model].dims
+    /** kanvas cetak perlu digambar ulang */
     let dirty = true
-    let hideGuides = false
+    /** layar perlu dirender ulang */
+    let needsRender = true
+    let exporting = false
     let disposed = false
     const stopAssets = onAssetsReady(() => (dirty = true))
     const imageError = () => store.getState().showToast('Gambar tidak bisa dibuka. Coba simpan ulang lalu unggah lagi.', 'error')
@@ -162,6 +158,11 @@ export default function Viewer() {
     // --- model kaos ---
     const loader = new GLTFLoader()
     const geometries = new Map<ModelId, Record<ModelPart, THREE.BufferGeometry>>()
+    // Atribut GLB bisa berselang (interleaved), jadi .array tidak bisa dibaca langsung.
+    const read = (geo: THREE.BufferGeometry, name: string) => {
+      const a = geo.getAttribute(name)
+      return Float32Array.from({ length: a.count * a.itemSize }, (_, k) => a.getComponent(Math.floor(k / a.itemSize), k % a.itemSize))
+    }
     async function loadModel(id: ModelId) {
       setStatus('loading')
       try {
@@ -172,21 +173,18 @@ export default function Viewer() {
           gltf.scene.traverse((o) => {
             if (o instanceof THREE.Mesh && PARTS.includes(o.name as ModelPart)) found[o.name as ModelPart] = o.geometry
           })
+          for (const part of PARTS) if (!found[part]) throw new Error(`bagian ${part} tidak ada`)
+          const sections = bodySections(read(found.body, 'position'))
+          geos = {} as Record<ModelPart, THREE.BufferGeometry>
           for (const part of PARTS) {
-            const geo = found[part]
-            if (!geo) throw new Error(`bagian ${part} tidak ada`)
-            // Atribut GLB bisa berselang (interleaved), jadi .array tidak bisa dibaca langsung.
-            const attr = (name: string) => {
-              const a = geo.getAttribute(name)
-              return Float32Array.from({ length: a.count * a.itemSize }, (_, k) => a.getComponent(Math.floor(k / a.itemSize), k % a.itemSize))
-            }
-            const a = printAttributes(attr('position'), attr('normal'), part, MODELS[id].dims)
-            // UV asli dipakai tekstur serat (channel 1), UV cetak dipakai kanvas (channel 0).
+            // Segitiga lepas supaya segitiga di tengah belakang bisa punya u sendiri (wrapUv).
+            const geo = found[part].index ? found[part].toNonIndexed() : found[part]
+            // UV asli dipakai tekstur serat (channel 1), UV bungkus dipakai kanvas cetak (channel 0).
             geo.setAttribute('uv1', geo.getAttribute('uv'))
-            geo.setAttribute('uv', new THREE.BufferAttribute(a.uv, 2))
-            geo.setAttribute('printMask', new THREE.BufferAttribute(a.mask, 1))
+            geo.setAttribute('uv', new THREE.BufferAttribute(wrapUv(read(geo, 'position'), sections), 2))
+            if (geo !== found[part]) found[part].dispose()
+            geos[part] = geo
           }
-          geos = found
           geometries.set(id, geos)
         }
         // Pengguna bisa sudah memilih lengan lain saat model ini dimuat.
@@ -197,8 +195,9 @@ export default function Viewer() {
         group.position.y = -dims.H * 0.55
         // Ujung lengan panjang turun sekitar 7 cm di bawah hem.
         ground.position.y = group.position.y - 0.08
+        group.updateMatrixWorld()
         applyFabric(store.getState().garment)
-        dirty = true
+        needsRender = true
         setStatus('ready')
       } catch {
         if (!disposed) setStatus('error')
@@ -206,7 +205,7 @@ export default function Viewer() {
     }
     retryRef.current = () => void loadModel(modelOf(store.getState().garment))
 
-    // --- bahan ---
+    // --- bahan dan warna ---
     const normalClones: THREE.Texture[] = []
     function applyFabric(g: Garment) {
       const f = FABRIC[g.material]
@@ -226,34 +225,41 @@ export default function Viewer() {
         m.sheenRoughness = f.sheenRoughness
         m.needsUpdate = true
       }
+      needsRender = true
     }
 
-    // --- warna dan cetakan ---
     function applyColors(g: Garment) {
-      outer.collar.color.set(g.colors.collar)
-      // Kilap serat mengikuti warna kain supaya warna gelap tidak tampak berdebu.
-      for (const part of PARTS) outer[part].sheenColor.set(g.colors[part]).lerp(WHITE, 0.5)
-      dirty = true
+      for (const part of PARTS) {
+        outer[part].color.set(g.colors[part])
+        // Kilap serat mengikuti warna kain supaya warna gelap tidak tampak berdebu.
+        outer[part].sheenColor.set(g.colors[part]).lerp(WHITE, 0.5)
+      }
+      needsRender = true
+    }
+
+    // --- kanvas cetak ---
+    const measure = document.createElement('canvas').getContext('2d')
+    const boxOf = (l: Layer) => (measure ? layerBox(measure, l, PRINT_FONT_FAMILIES[l.kind === 'text' ? l.font : 'anton']) : { w: 0, h: 0 })
+    /** Jari-jari pegangan seleksi (cm) supaya tampak sekitar 9 px (mouse) atau 11 px (sentuh) di layar. Area sentuh 2,2 kali lipat. */
+    const coarse = window.matchMedia('(pointer: coarse)')
+    let handleR = 1
+    const handleRadius = () => {
+      const D = camera.position.distanceTo(controls.target)
+      const pxPerCm = host!.clientHeight / (2 * D * Math.tan((camera.fov / 2) * DEG)) / 100
+      return (coarse.matches ? 11 : 9) / Math.max(pxPerCm, 0.01)
     }
 
     function repaint() {
       const s = store.getState()
-      const frames = zoneFrames(dims, canvases.body.width, canvases.sleeveL.width)
-      const selected = s.layers.find((l) => l.id === s.selectedId)
-      const input = {
-        garment: s.garment,
+      const ctx = printCanvas.getContext('2d')
+      if (!ctx) return
+      paintWrap(ctx, {
         layers: s.layers,
-        frames,
         fonts: PRINT_FONT_FAMILIES,
         images: loadedImages(s.layers, imageError),
-        guide: !hideGuides && s.showGuides && selected ? selected.zone : null,
-      }
-      for (const id of Object.keys(canvases) as CanvasId[]) {
-        const ctx = canvases[id].getContext('2d')
-        if (!ctx) continue
-        paintCanvas(id, ctx, input)
-        textures[id].needsUpdate = true
-      }
+        selection: !exporting && s.selectedId ? { id: s.selectedId, r: handleR } : null,
+      })
+      if (texture) texture.needsUpdate = true
     }
 
     // --- kualitas ---
@@ -262,17 +268,13 @@ export default function Viewer() {
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, c.ratio))
       renderer.shadowMap.enabled = c.shadows
       key.castShadow = c.shadows
-      canvases.body.width = c.body
-      canvases.body.height = c.body / 2
-      for (const id of ['sleeveL', 'sleeveR'] as const) canvases[id].width = canvases[id].height = c.sleeve
-      for (const id of Object.keys(canvases) as CanvasId[]) {
-        const part = id as keyof typeof outer
-        outer[part].map = makeTexture(id)
+      printCanvas.width = c.wrap
+      printCanvas.height = Math.round((c.wrap * WRAP_H) / WRAP_W)
+      const t = makeTexture()
+      for (const part of PARTS) {
+        outer[part].map = t
         outer[part].needsUpdate = true
       }
-      outer.body.color.set(0xffffff)
-      outer.sleeveL.color.set(0xffffff)
-      outer.sleeveR.color.set(0xffffff)
       resize()
       dirty = true
     }
@@ -288,6 +290,7 @@ export default function Viewer() {
       t.offset.set((1 - t.repeat.x) / 2, (1 - t.repeat.y) / 2)
     }
     function applyScene(sc: Scene, prev?: Scene) {
+      needsRender = true
       const l = LIGHTS[sc.light]
       scene.environmentIntensity = l.env * sc.lightIntensity
       key.intensity = l.key * sc.lightIntensity
@@ -324,6 +327,7 @@ export default function Viewer() {
           bgTexture = t
           scene.background = t
           coverBackground(camera.aspect)
+          needsRender = true
         })
       } else if (bg.type === 'image') scene.background = new THREE.Color(bg.color)
       else scene.background = null
@@ -351,6 +355,7 @@ export default function Viewer() {
     }
     function goTo(p: CameraPreset | 'reset', instant = false) {
       const pose = presetPose(p)
+      needsRender = true
       if (instant || reduceMotion.matches) {
         camera.position.copy(pose.pos)
         controls.target.copy(pose.target)
@@ -360,6 +365,15 @@ export default function Viewer() {
       anim = { from: camera.position.clone(), to: pose.pos, tFrom: controls.target.clone(), tTo: pose.target, t: 0 }
     }
     controls.addEventListener('start', () => (anim = null))
+    // Pegangan seleksi menjaga ukurannya di layar saat diperbesar atau diperkecil.
+    controls.addEventListener('change', () => {
+      needsRender = true
+      const r = handleRadius()
+      if (Math.abs(r - handleR) / handleR > 0.15) {
+        handleR = r
+        if (store.getState().selectedId) dirty = true
+      }
+    })
 
     // --- ukuran ---
     function resize() {
@@ -370,19 +384,120 @@ export default function Viewer() {
       camera.aspect = w / h
       camera.updateProjectionMatrix()
       coverBackground(camera.aspect)
+      handleR = handleRadius()
+      needsRender = true
     }
     const ro = new ResizeObserver(resize)
     ro.observe(host)
 
+    // --- edit langsung di kaos ---
+    const raycaster = new THREE.Raycaster()
+    const ndc = new THREE.Vector2()
+    /** Titik kanvas cetak (cm) di bawah koordinat layar, atau null bila tidak mengenai kaos. */
+    function pick(clientX: number, clientY: number) {
+      const r = canvas.getBoundingClientRect()
+      ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1)
+      raycaster.setFromCamera(ndc, camera)
+      const uv = raycaster.intersectObjects(Object.values(meshes), false)[0]?.uv
+      if (!uv) return null
+      return { x: (uv.x - Math.floor(uv.x) - 0.5) * WRAP_W, y: (0.5 - uv.y) * WRAP_H }
+    }
+    viewerApi.aim = (x, y) => {
+      const r = canvas.getBoundingClientRect()
+      return pick(x ?? r.left + r.width / 2, y ?? r.top + r.height / 2)
+    }
+
+    let drag: Drag | null = null
+    // Listener fase capture di host berjalan sebelum OrbitControls (di canvas): bila mengenai lapisan,
+    // event dihentikan supaya kamera tidak ikut berputar.
+    const onDown = (e: PointerEvent) => {
+      if (drag) return e.stopPropagation()
+      if (e.button !== 0) return
+      const p = pick(e.clientX, e.clientY)
+      const s = store.getState()
+      const sel = s.layers.find((l) => l.id === s.selectedId)
+      let target: Layer | undefined
+      let mode: Drag['mode'] = 'move'
+      if (p && sel) {
+        const h = hitHandle(sel, boxOf(sel), handleR, p, e.pointerType === 'mouse' ? 1.4 : 2.2)
+        if (h >= 0) {
+          target = sel
+          mode = h === 4 ? 'rotate' : 'resize'
+        }
+      }
+      if (!target && p) target = hitLayer(s.layers, boxOf, p)
+      if (!target || !p) {
+        if (sel) s.selectLayer(null)
+        return
+      }
+      e.stopPropagation()
+      if (target.id !== s.selectedId) s.selectLayer(target.id)
+      holdHistory(true)
+      drag = { id: target.id, pointerId: e.pointerId, mode, start: p, layer: target, dist: Math.max(0.1, Math.hypot(wrapDx(p.x - target.x), p.y - target.y)) }
+      canvas.setPointerCapture(e.pointerId)
+    }
+    let hover: { x: number; y: number } | null = null
+    const onMove = (e: PointerEvent) => {
+      if (!drag) {
+        if (e.pointerType === 'mouse' && e.buttons === 0) hover = { x: e.clientX, y: e.clientY }
+        return
+      }
+      e.stopPropagation()
+      if (e.pointerId !== drag.pointerId) return
+      const p = pick(e.clientX, e.clientY)
+      if (!p) return
+      const s = store.getState()
+      const l = drag.layer
+      if (drag.mode === 'move') return s.updateLayer(l.id, placeLayer(l.x + wrapDx(p.x - drag.start.x), l.y + p.y - drag.start.y))
+      if (drag.mode === 'resize') {
+        const k = Math.hypot(wrapDx(p.x - l.x), p.y - l.y) / drag.dist
+        if (l.kind === 'image') s.updateLayer(l.id, { width: Math.min(WRAP_W, Math.max(1, l.width * k)) })
+        else s.updateLayer(l.id, { size: Math.min(30, Math.max(0.5, l.size * k)) })
+        return
+      }
+      // Pegangan putar ada di atas kotak, jadi sudut 0 = pointer tepat di atas pusat. Menempel ke kelipatan 45° dalam 4°.
+      let deg = Math.atan2(p.y - l.y, wrapDx(p.x - l.x)) / DEG + 90
+      deg = ((deg + 540) % 360) - 180
+      const snap = Math.round(deg / 45) * 45
+      s.updateLayer(l.id, { rotation: Math.abs(deg - snap) < 4 ? snap : Math.round(deg) })
+    }
+    const onUp = (e: PointerEvent) => {
+      if (!drag) return
+      e.stopPropagation()
+      if (e.pointerId !== drag.pointerId) return
+      drag = null
+      holdHistory(false)
+      if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId)
+    }
+    const onDouble = (e: MouseEvent) => {
+      const p = pick(e.clientX, e.clientY)
+      const l = p && hitLayer(store.getState().layers, boxOf, p)
+      if (l?.kind === 'text') document.getElementById('layer-text')?.focus()
+    }
+    host.addEventListener('pointerdown', onDown, true)
+    host.addEventListener('pointermove', onMove, true)
+    host.addEventListener('pointerup', onUp, true)
+    host.addEventListener('pointercancel', onUp, true)
+    host.addEventListener('dblclick', onDouble)
+
+    function updateCursor() {
+      const at = hover
+      hover = null
+      if (!at) return
+      const p = pick(at.x, at.y)
+      const s = store.getState()
+      const sel = s.layers.find((l) => l.id === s.selectedId)
+      const h = p && sel ? hitHandle(sel, boxOf(sel), handleR, p, 1.4) : -1
+      canvas.style.cursor = h >= 0 ? CURSOR[h] : p && hitLayer(s.layers, boxOf, p) ? 'move' : ''
+    }
+
     // --- ekspor ---
-    let exporting = false
     viewerApi.exportImage = async (o) => {
       exporting = true
       const prevSize = renderer.getSize(new THREE.Vector2())
       const prevRatio = renderer.getPixelRatio()
       const prevBg = scene.background
       const bgType = store.getState().scene.background.type
-      hideGuides = true
       repaint()
       if (o.format === 'png' && o.transparent) scene.background = null
       else if (bgType === 'transparent') scene.background = new THREE.Color(0xffffff)
@@ -393,19 +508,16 @@ export default function Viewer() {
       coverBackground(1)
       try {
         renderer.render(scene, camera)
-        const blob = await new Promise<Blob | null>((res) =>
-          canvas.toBlob(res, o.format === 'png' ? 'image/png' : 'image/jpeg', 0.92),
-        )
+        const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, o.format === 'png' ? 'image/png' : 'image/jpeg', 0.92))
         if (!blob) throw new Error('toBlob gagal')
         return blob
       } finally {
         scene.background = prevBg
         renderer.setPixelRatio(prevRatio)
         renderer.setSize(prevSize.x, prevSize.y, false)
-        hideGuides = false
+        exporting = false
         resize()
         dirty = true
-        exporting = false
       }
     }
 
@@ -421,10 +533,10 @@ export default function Viewer() {
     canvas.addEventListener('webglcontextlost', onLost)
     canvas.addEventListener('webglcontextrestored', onRestored)
 
-    // --- loop ---
+    // --- loop: hanya merender saat ada yang berubah ---
     let last = performance.now()
     let frames = 0
-    let windowStart = last
+    let busy = 0
     renderer.setAnimationLoop((now: number) => {
       const dt = Math.min(0.1, (now - last) / 1000)
       last = now
@@ -434,17 +546,23 @@ export default function Viewer() {
         camera.position.lerpVectors(anim.from, anim.to, k)
         controls.target.lerpVectors(anim.tFrom, anim.tTo, k)
         if (anim.t >= 1) anim = null
+        needsRender = true
       }
       controls.update()
+      updateCursor()
       if (dirty) {
         dirty = false
         repaint()
+        needsRender = true
       }
+      if (!needsRender) return
+      needsRender = false
       renderer.render(scene, camera)
-      // Turunkan kualitas bila rata-rata di bawah 24 fps selama 3 detik.
+      // Turunkan kualitas bila rata-rata di bawah 24 fps selama 3 detik render.
       frames++
-      if (now - windowStart > 3000) {
-        const fps = (frames * 1000) / (now - windowStart)
+      busy += dt
+      if (busy > 3) {
+        const fps = frames / busy
         const q = store.getState().quality
         if (fps < 24 && q !== 'low' && !document.hidden && !exporting) {
           store.getState().setQuality(QUALITY_DOWN[q])
@@ -453,7 +571,7 @@ export default function Viewer() {
             .showToast('Kami menurunkan kualitas tampilan supaya tetap lancar di perangkat ini. Kamu bisa mengubahnya di panel Latar dan Cahaya.')
         }
         frames = 0
-        windowStart = now
+        busy = 0
       }
     })
 
@@ -472,7 +590,7 @@ export default function Viewer() {
         else if (g.material !== p.garment.material || g.thickness !== p.garment.thickness) applyFabric(g)
         if (g.colors !== p.garment.colors) applyColors(g)
       }
-      if (s.layers !== p.layers || s.selectedId !== p.selectedId || s.showGuides !== p.showGuides) dirty = true
+      if (s.layers !== p.layers || s.selectedId !== p.selectedId) dirty = true
       if (s.scene !== p.scene) applyScene(s.scene, p.scene)
       if (s.quality !== p.quality) applyQuality(s.quality)
       if (s.cameraRequest && s.cameraRequest !== p.cameraRequest) goTo(s.cameraRequest.preset)
@@ -485,12 +603,18 @@ export default function Viewer() {
       renderer.setAnimationLoop(null)
       ro.disconnect()
       controls.dispose()
+      host.removeEventListener('pointerdown', onDown, true)
+      host.removeEventListener('pointermove', onMove, true)
+      host.removeEventListener('pointerup', onUp, true)
+      host.removeEventListener('pointercancel', onUp, true)
+      host.removeEventListener('dblclick', onDouble)
       canvas.removeEventListener('webglcontextlost', onLost)
       canvas.removeEventListener('webglcontextrestored', onRestored)
       viewerApi.exportImage = null
+      viewerApi.aim = null
       geometries.forEach((geos) => Object.values(geos).forEach((g) => g.dispose()))
       Object.values(outer).forEach((m) => m.dispose())
-      Object.values(textures).forEach((t) => t.dispose())
+      texture?.dispose()
       normalClones.forEach((t) => t.dispose())
       bgTexture?.dispose()
       ground.geometry.dispose()

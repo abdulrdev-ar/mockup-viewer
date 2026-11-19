@@ -1,4 +1,4 @@
-import type { StateStorage } from 'zustand/middleware'
+import type { PersistStorage, StorageValue } from 'zustand/middleware'
 
 export type SaveStatus = 'saving' | 'saved' | 'error'
 
@@ -28,12 +28,15 @@ const run = <T>(mode: IDBTransactionMode, op: (s: IDBObjectStore) => IDBRequest<
 const available = () => typeof indexedDB !== 'undefined'
 let timer: ReturnType<typeof setTimeout> | undefined
 
-// ponytail: tulis ulang seluruh proyek tiap simpan (debounce 500 ms). Pecah per lapisan bila proyek jadi puluhan MB.
-export const idbStorage: StateStorage = {
+// Objek disimpan langsung (structured clone), bukan JSON: tidak ada stringify gambar besar di setiap perubahan,
+// hanya satu salinan saat menulis setelah 500 ms diam.
+// ponytail: tulis ulang seluruh proyek tiap simpan. Pecah per lapisan bila proyek jadi puluhan MB.
+export const idbStorage = <S>(): PersistStorage<S> => ({
   getItem: (key) =>
     available()
-      ? run<string | undefined>('readonly', (s) => s.get(key))
-          .then((v) => v ?? null)
+      ? run<StorageValue<S> | string | undefined>('readonly', (s) => s.get(key))
+          // Proyek dari versi lama tersimpan sebagai teks JSON.
+          .then((v) => (typeof v === 'string' ? (JSON.parse(v) as StorageValue<S>) : (v ?? null)))
           .catch(() => (emit('error'), null))
       : null,
   setItem: (key, value) => {
@@ -49,4 +52,4 @@ export const idbStorage: StateStorage = {
   removeItem: (key) => {
     if (available()) void run('readwrite', (s) => s.delete(key))
   },
-}
+})

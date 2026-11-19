@@ -467,12 +467,12 @@ textarea.input {
 }
 
 
-/* --- Tata letak editor, pola Canva: rel alat, panel alat, kanvas desain, pratinjau 3D --- */
+/* --- Tata letak editor: opsi (rel alat + panel) dan pratinjau 3D. Layar sempit: pratinjau di atas. --- */
 
 .main {
   display: grid;
   min-height: 0;
-  grid-template-areas: 'toggle' 'work' 'rail' 'panel';
+  grid-template-areas: 'preview' 'rail' 'panel';
 }
 
 .rail {
@@ -522,39 +522,17 @@ textarea.input {
   margin-top: 12px;
 }
 
-.viewToggle {
-  grid-area: toggle;
-  padding: 10px 16px;
-}
-
-.workspace,
 .preview {
-  grid-area: work;
+  grid-area: preview;
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto auto;
   min-width: 0;
-  min-height: 0;
 }
 
-.workspace[data-hidden='true'],
-.preview[data-hidden='true'] {
-  display: none;
-}
-
-.workspace {
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  height: 64dvh;
-  min-height: 420px;
-}
-
-.surfaceBar {
-  padding: 4px 16px 10px;
-}
-
-.preview {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  height: 64dvh;
-  min-height: 420px;
+.preview .stage {
+  height: 62dvh;
+  min-height: 360px;
 }
 
 .stage {
@@ -563,21 +541,38 @@ textarea.input {
   background: var(--neutral);
 }
 
-/* Bilah konteks: hanya berisi pengaturan lapisan yang dipilih. */
-.toolbar {
+/* Bilah pengaturan lapisan terpilih, lalu tombol Lapisan yang selalu di tempat sama. Layar sempit: di bawah area 3D
+   (dekat jempol). Layar lebar: melayang di atas area 3D. Keduanya menjaga ukuran kanvas tetap saat bilah berganti isi,
+   jadi kaos tidak bergeser di bawah jari. */
+.previewBar {
+  position: relative;
+  z-index: 10;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px 12px;
   padding: 8px 16px;
   background: var(--surface);
   border-block: 1px solid var(--border);
 }
 
+.toolbar {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
 .toolbarHint {
-  min-height: 57px;
+  flex: 1;
+  align-self: center;
   font-size: 13px;
   color: var(--ink-muted);
+}
+
+.layersToggle {
+  flex: none;
 }
 
 /* Label di samping kolom supaya bilah tetap satu baris di layar lebar. */
@@ -658,141 +653,36 @@ textarea.input {
   box-shadow: 0 8px 24px rgba(17, 42, 51, 0.12);
 }
 
-/* Halaman desain: area cetak satu sisi kaos di atas meja kerja. Bayangan tipis memisahkan halaman dari meja. */
-.pageHost {
-  position: relative;
-  display: grid;
-  place-items: center;
-  min-height: 0;
-  overflow: hidden;
-  background: var(--neutral);
-  user-select: none;
-}
-
-.pageDrop {
+/* Seret file ke pratinjau. */
+.stageDrop {
   outline: 2px dashed var(--primary);
   outline-offset: -8px;
 }
 
-.page {
-  position: relative;
-  margin: 0;
-  touch-action: none;
-  box-shadow: 0 1px 2px rgba(17, 42, 51, 0.12), 0 8px 24px rgba(17, 42, 51, 0.08);
-}
-
-.pageCanvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-.pageEmpty {
+/* Panel lapisan melayang di atas pratinjau. Bayangan menandai lapisan di atas kaos 3D, sama dengan panel Lainnya. */
+/* Layar sempit: panel terbuka ke atas, di atas area 3D. */
+.layersPanel {
   position: absolute;
-  inset: 0;
+  bottom: calc(100% + 8px);
+  right: 12px;
   display: grid;
-  place-items: center;
-  padding: 16px;
-  text-align: center;
-  font-size: 13px;
-  color: var(--ink-muted);
-  background: rgba(255, 255, 255, 0.6);
-  pointer-events: none;
-}
-
-.pageMeta {
-  position: absolute;
-  left: 16px;
-  bottom: 6px;
-  color: var(--ink-muted);
-  pointer-events: none;
-}
-
-.hoverBox,
-.selectBox {
-  position: absolute;
-  left: 0;
-  top: 0;
-  transform-origin: center;
-  pointer-events: none;
-}
-
-.hoverBox {
-  outline: 1px dashed var(--primary);
-}
-
-.selectBox {
-  outline: 1.5px solid var(--primary);
-}
-
-.handle,
-.rotateHandle {
-  position: absolute;
-  width: 14px;
-  height: 14px;
+  align-content: start;
+  gap: 8px;
+  width: min(320px, calc(100% - 24px));
+  max-height: min(60dvh, 480px);
+  overflow-y: auto;
+  padding: 8px 12px 16px;
   background: var(--surface);
-  border: 1.5px solid var(--primary);
-  pointer-events: auto;
-  touch-action: none;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: 0 8px 24px rgba(17, 42, 51, 0.12);
 }
 
-/* Area sentuh pegangan lebih besar dari gambarnya. */
-.handle::before,
-.rotateHandle::before {
-  content: '';
-  position: absolute;
-  inset: -12px;
-}
-
-.handle {
-  border-radius: 3px;
-}
-
-.handle_nw {
-  left: -7px;
-  top: -7px;
-  cursor: nwse-resize;
-}
-
-.handle_ne {
-  right: -7px;
-  top: -7px;
-  cursor: nesw-resize;
-}
-
-.handle_se {
-  right: -7px;
-  bottom: -7px;
-  cursor: nwse-resize;
-}
-
-.handle_sw {
-  left: -7px;
-  bottom: -7px;
-  cursor: nesw-resize;
-}
-
-.rotateHandle {
-  left: calc(50% - 7px);
-  top: -34px;
-  border-radius: 50%;
-  cursor: grab;
-}
-
-.rotateHandle::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 100%;
-  height: 20px;
-  border-left: 1.5px solid var(--primary);
-}
-
-@media (pointer: coarse) {
-  .handle::before,
-  .rotateHandle::before {
-    inset: -16px;
-  }
+.layersHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .presets {
@@ -827,17 +717,57 @@ textarea.input {
   font-size: 13px;
 }
 
+/* Pegangan urut: hanya pegangan yang menahan sentuhan, daftar dan halaman tetap bisa digulir. */
 .layerGrip {
-  padding-left: 8px;
+  flex: none;
+  width: 44px;
+  min-height: 44px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
   color: var(--ink-muted);
+  font-size: 18px;
   cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
+.layerGrip:is(:hover, :focus-visible) {
+  background: var(--neutral);
+}
+
+/* Baris yang diangkat mengikuti jari. Garis biru di antara baris menandai tempat jatuhnya. */
 .layerDragging {
-  opacity: 0.5;
+  position: relative;
+  z-index: 1;
+  background: var(--surface);
+  box-shadow: 0 4px 12px rgba(17, 42, 51, 0.16);
 }
 
-/* Tablet dan laptop kecil: rel tegak dan panel di kiri, kanvas atau pratinjau di kanan. */
+.layerDragging .layerGrip {
+  cursor: grabbing;
+}
+
+.dropBefore {
+  box-shadow: inset 0 2px 0 var(--primary);
+}
+
+.dropAfter {
+  box-shadow: inset 0 -2px 0 var(--primary);
+}
+
+@media (forced-colors: active) {
+  .dropBefore {
+    box-shadow: inset 0 2px 0 Highlight;
+  }
+
+  .dropAfter {
+    box-shadow: inset 0 -2px 0 Highlight;
+  }
+}
+
+/* 1024 px ke atas: opsi di kiri (rel tegak dan panel), pratinjau 3D di kanan. */
 @media (min-width: 1024px) {
   .shell {
     height: 100dvh;
@@ -845,8 +775,8 @@ textarea.input {
 
   .main {
     grid-template-columns: 96px 300px minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
-    grid-template-areas: 'rail panel toggle' 'rail panel work';
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: 'rail panel preview';
     overflow: hidden;
   }
 
@@ -866,35 +796,24 @@ textarea.input {
     border-right: 1px solid var(--border);
   }
 
-  .workspace,
   .preview {
+    grid-template-rows: minmax(0, 1fr) auto;
+    min-height: 0;
+  }
+
+  .preview .stage {
     height: auto;
     min-height: 0;
   }
-}
 
-/* Layar lebar: kanvas desain dan pratinjau 3D berdampingan, sakelar tampilan tidak perlu. */
-@media (min-width: 1280px) {
-  .main {
-    grid-template-columns: 96px 300px minmax(0, 1fr) minmax(300px, 28%);
-    grid-template-rows: minmax(0, 1fr);
-    grid-template-areas: 'rail panel work preview';
+  .previewBar {
+    position: absolute;
+    inset: 0 0 auto;
+    border-block-start: 0;
   }
 
-  .viewToggle {
-    display: none;
-  }
-
-  .workspace[data-hidden='true'] {
-    display: grid;
-  }
-
-  .preview {
-    grid-area: preview;
-    border-left: 1px solid var(--border);
-  }
-
-  .preview[data-hidden='true'] {
-    display: grid;
+  .layersPanel {
+    top: calc(100% + 8px);
+    bottom: auto;
   }
 }
